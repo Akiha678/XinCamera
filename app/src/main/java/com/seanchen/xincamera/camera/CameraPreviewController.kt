@@ -4,6 +4,7 @@ import android.content.Context
 import android.hardware.camera2.CameraCharacteristics
 import android.hardware.camera2.CaptureRequest
 import android.os.Environment
+import android.provider.MediaStore
 import androidx.annotation.OptIn
 import androidx.camera.camera2.interop.Camera2CameraControl
 import androidx.camera.camera2.interop.Camera2CameraInfo
@@ -22,7 +23,6 @@ import androidx.camera.view.PreviewView
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.LifecycleOwner
 import androidx.lifecycle.Observer
-import java.io.File
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -131,7 +131,10 @@ class CameraPreviewController(
     }
 
     /**
-     * 拍照保存到应用专属图片目录，避免为了演示版本再额外申请存储权限。
+     * 拍照直接写入系统相册。
+     *
+     * Android 10+ 走 MediaStore，拍完即可出现在图库里；
+     * Android 9 及以下因为有 maxSdkVersion 限制，仍然可以写入外部存储。
      */
     fun capturePhoto(
         onSaved: (String) -> Unit,
@@ -141,24 +144,22 @@ class CameraPreviewController(
             onError("ImageCapture not ready")
             return
         }
-        val pictureDir = File(
-            context.getExternalFilesDir(Environment.DIRECTORY_PICTURES),
-            "captures"
-        ).apply {
-            if (!exists()) {
-                mkdirs()
+        val contentValues = android.content.ContentValues().apply {
+            put(MediaStore.MediaColumns.DISPLAY_NAME, "xin_${TIMESTAMP_FORMAT.format(Date())}")
+            put(MediaStore.MediaColumns.MIME_TYPE, "image/jpeg")
+            if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.Q) {
+                put(
+                    MediaStore.Images.Media.RELATIVE_PATH,
+                    "${Environment.DIRECTORY_PICTURES}/XinCamera"
+                )
+                put(MediaStore.Images.Media.IS_PENDING, 1)
             }
         }
-        if (!pictureDir.exists()) {
-            onError("Failed to create capture directory")
-            return
-        }
-
-        val outputFile = File(
-            pictureDir,
-            "xin_${TIMESTAMP_FORMAT.format(Date())}.jpg"
-        )
-        val outputOptions = ImageCapture.OutputFileOptions.Builder(outputFile).build()
+        val outputOptions = ImageCapture.OutputFileOptions.Builder(
+            context.contentResolver,
+            MediaStore.Images.Media.EXTERNAL_CONTENT_URI,
+            contentValues
+        ).build()
 
         captureUseCase.takePicture(
             outputOptions,
@@ -167,7 +168,14 @@ class CameraPreviewController(
                 override fun onImageSaved(
                     outputFileResults: ImageCapture.OutputFileResults
                 ) {
-                    onSaved(outputFile.absolutePath)
+                    val uri = outputFileResults.savedUri
+                    if (uri != null && android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.Q) {
+                        val finalizeValues = android.content.ContentValues().apply {
+                            put(MediaStore.Images.Media.IS_PENDING, 0)
+                        }
+                        context.contentResolver.update(uri, finalizeValues, null, null)
+                    }
+                    onSaved(uri?.toString() ?: "saved")
                 }
 
                 override fun onError(exception: ImageCaptureException) {
