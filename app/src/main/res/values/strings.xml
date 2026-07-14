@@ -15,4 +15,23 @@
     <string name="camera_front_lens">前置镜头</string>
     <string name="camera_rear_active">已切换到后置镜头</string>
     <string name="camera_front_active">已切换到前置镜头</string>
+    <string name="camera_setting_button">Setting</string>
+    <string name="camera_setting_title">专业模式设置</string>
+    <string name="camera_setting_close">关闭</string>
+    <string name="camera_setting_hint">点击面板内的控件，可以实时调节 ISO、快门速度和白平衡。</string>
+    <string name="camera_setting_not_supported">当前镜头不支持</string>
+    <string name="camera_manual_enabled">手动曝光：已开启</string>
+    <string name="camera_manual_disabled">手动曝光：自动</string>
+    <string name="camera_manual_exposure_unsupported">当前镜头不支持手动 ISO / 快门控制</string>
+    <string name="camera_manual_badge">PRO</string>
+    <string name="camera_iso_title">ISO</string>
+    <string name="camera_shutter_title">快门速度</string>
+    <string name="camera_white_balance_title">白平衡</string>
+    <string name="camera_white_balance_auto">自动</string>
+    <string name="camera_white_balance_incandescent">白炽灯</string>
+    <string name="camera_white_balance_fluorescent">荧光灯</string>
+    <string name="camera_white_balance_daylight">日光</string>
+    <string name="camera_white_balance_cloudy">多云</string>
+    <string name="camera_white_balance_shade">阴影</string>
+    <string name="camera_white_balance_status">白平衡已切换为 %1$s</string>
 </resources>

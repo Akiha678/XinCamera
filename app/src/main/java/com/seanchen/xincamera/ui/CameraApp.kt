@@ -1,6 +1,7 @@
 package com.seanchen.xincamera.ui
 
 import android.Manifest
+import android.annotation.SuppressLint
 import android.content.pm.PackageManager
 import android.view.GestureDetector
 import android.view.MotionEvent
@@ -9,6 +10,7 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.camera.core.CameraSelector
 import androidx.camera.view.PreviewView
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -131,6 +133,7 @@ private fun PermissionScreen(
     }
 }
 
+@SuppressLint("ClickableViewAccessibility")
 @Composable
 private fun CameraScreen(
     nativeStatus: String
@@ -167,7 +170,6 @@ private fun CameraScreen(
                     val didFocus = cameraController.focusAt(event.x, event.y)
                     if (didFocus) {
                         focusPoint = Offset(event.x / width, event.y / height)
-                        statusMessage = context.getString(R.string.camera_focus_locked)
                         focusScope.launch {
                             delay(900)
                             focusPoint = null
@@ -226,6 +228,8 @@ private fun CameraScreen(
             },
             onError = { error ->
                 statusMessage = error
+            },
+            onProfessionalCapabilitiesChanged = { capabilities ->
             }
         )
         onDispose {
@@ -273,34 +277,6 @@ private fun CameraScreen(
                 .padding(horizontal = 16.dp, vertical = 12.dp),
             verticalArrangement = Arrangement.SpaceBetween
         ) {
-            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                Row(
-                    horizontalArrangement = Arrangement.spacedBy(10.dp)
-                ) {
-                    StatusChip(label = stringResource(R.string.camera_preview_label))
-                    StatusChip(label = nativeStatus)
-                }
-                Row(
-                    horizontalArrangement = Arrangement.spacedBy(10.dp)
-                ) {
-                    StatusChip(label = "${String.format("%.1f", zoomRatio)}x")
-                    StatusChip(
-                        label = if (lensFacing == CameraSelector.LENS_FACING_BACK) {
-                            stringResource(R.string.camera_rear_lens)
-                        } else {
-                            stringResource(R.string.camera_front_lens)
-                        }
-                    )
-                }
-                Text(
-                    text = statusMessage.ifBlank {
-                        stringResource(R.string.camera_tap_focus_hint)
-                    },
-                    color = Color(0xFFE1E7EE),
-                    style = MaterialTheme.typography.bodyMedium
-                )
-            }
-
             Column(
                 verticalArrangement = Arrangement.spacedBy(18.dp)
             ) {
@@ -318,12 +294,11 @@ private fun CameraScreen(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
+                    // 闪光灯按钮
                     Button(
                         onClick = {
                             if (torchAvailable) {
                                 cameraController.setTorchEnabled(!torchEnabled)
-                            } else {
-                                statusMessage = context.getString(R.string.camera_flash_unavailable)
                             }
                         },
                         modifier = Modifier.weight(1f),
@@ -340,6 +315,7 @@ private fun CameraScreen(
                             }
                         )
                     }
+                    // 切换镜头
                     OutlinedButton(
                         onClick = {
                             lensFacing = if (lensFacing == CameraSelector.LENS_FACING_BACK) {
@@ -347,11 +323,11 @@ private fun CameraScreen(
                             } else {
                                 CameraSelector.LENS_FACING_BACK
                             }
-                            statusMessage = if (lensFacing == CameraSelector.LENS_FACING_BACK) {
-                                context.getString(R.string.camera_rear_active)
-                            } else {
-                                context.getString(R.string.camera_front_active)
-                            }
+//                            statusMessage = if (lensFacing == CameraSelector.LENS_FACING_BACK) {
+//                                context.getString(R.string.camera_rear_active)
+//                            } else {
+//                                context.getString(R.string.camera_front_active)
+//                            }
                         },
                         modifier = Modifier.weight(1f)
                     ) {
@@ -381,27 +357,9 @@ private fun CameraScreen(
                     color = Color.Transparent,
                     tonalElevation = 0.dp,
                     shadowElevation = 0.dp,
-                    border = androidx.compose.foundation.BorderStroke(2.dp, Color(0xFFFFB04C))
+                    border = BorderStroke(2.dp, Color(0xFFFFB04C))
                 ) {}
             }
         }
-    }
-}
-
-@Composable
-private fun StatusChip(
-    label: String
-) {
-    Box(
-        modifier = Modifier
-            .clip(RoundedCornerShape(50))
-            .background(Color(0x9911161C))
-            .padding(horizontal = 14.dp, vertical = 8.dp)
-    ) {
-        Text(
-            text = label,
-            color = Color.White,
-            style = MaterialTheme.typography.labelLarge
-        )
     }
 }
