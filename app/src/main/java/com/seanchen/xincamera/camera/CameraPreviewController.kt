@@ -3,6 +3,7 @@ package com.seanchen.xincamera.camera
 import android.content.Context
 import android.hardware.camera2.CameraCharacteristics
 import android.hardware.camera2.CaptureRequest
+import android.os.Environment
 import androidx.annotation.OptIn
 import androidx.camera.camera2.interop.Camera2CameraControl
 import androidx.camera.camera2.interop.Camera2CameraInfo
@@ -11,6 +12,8 @@ import androidx.camera.camera2.interop.ExperimentalCamera2Interop
 import androidx.camera.core.Camera
 import androidx.camera.core.CameraSelector
 import androidx.camera.core.FocusMeteringAction
+import androidx.camera.core.ImageCapture
+import androidx.camera.core.ImageCaptureException
 import androidx.camera.core.Preview
 import androidx.camera.core.TorchState
 import androidx.camera.core.ZoomState
@@ -19,20 +22,26 @@ import androidx.camera.view.PreviewView
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.LifecycleOwner
 import androidx.lifecycle.Observer
+import java.io.File
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
 import java.util.concurrent.TimeUnit
 
 /**
- * 预览控制器把 CameraX 的能力整理成 UI 可直接调用的接口。
+ * 预览控制器把 CameraX 的能力整理成 UI 可以直接调用的接口。
  *
  * 当前负责：
  * 1. 预览绑定
  * 2. 变焦 / 点击对焦 / 手电筒
- * 3. 第二部分专业模式参数下发
+ * 3. 拍照
+ * 4. 第二部分专业模式参数下发
  */
 class CameraPreviewController(
     private val context: Context
 ) {
     private var camera: Camera? = null
+    private var imageCapture: ImageCapture? = null
     private var previewView: PreviewView? = null
     private var zoomObserver: Observer<ZoomState>? = null
     private var torchObserver: Observer<Int>? = null
@@ -59,6 +68,9 @@ class CameraPreviewController(
                 val preview = Preview.Builder().build().also { useCase ->
                     useCase.surfaceProvider = previewView.surfaceProvider
                 }
+                val captureUseCase = ImageCapture.Builder()
+                    .setCaptureMode(ImageCapture.CAPTURE_MODE_MINIMIZE_LATENCY)
+                    .build()
 
                 try {
                     val boundCamera = provider.bindToLifecycle(
@@ -66,9 +78,11 @@ class CameraPreviewController(
                         CameraSelector.Builder()
                             .requireLensFacing(lensFacing)
                             .build(),
-                        preview
+                        preview,
+                        captureUseCase
                     )
                     camera = boundCamera
+                    imageCapture = captureUseCase
 
                     val hasFlashUnit = boundCamera.cameraInfo.hasFlashUnit()
                     onTorchAvailabilityChanged(hasFlashUnit)
@@ -98,6 +112,7 @@ class CameraPreviewController(
                     }
                 } catch (error: Exception) {
                     camera = null
+                    imageCapture = null
                     onError(error.message ?: "Camera binding failed")
                 }
             },
@@ -113,6 +128,53 @@ class CameraPreviewController(
     fun updateProfessionalSettings(settings: ProfessionalCameraSettings) {
         professionalSettings = settings
         camera?.let(::applyProfessionalSettings)
+    }
+
+    /**
+     * 拍照保存到应用专属图片目录，避免为了演示版本再额外申请存储权限。
+     */
+    fun capturePhoto(
+        onSaved: (String) -> Unit,
+        onError: (String) -> Unit
+    ) {
+        val captureUseCase = imageCapture ?: run {
+            onError("ImageCapture not ready")
+            return
+        }
+        val pictureDir = File(
+            context.getExternalFilesDir(Environment.DIRECTORY_PICTURES),
+            "captures"
+        ).apply {
+            if (!exists()) {
+                mkdirs()
+            }
+        }
+        if (!pictureDir.exists()) {
+            onError("Failed to create capture directory")
+            return
+        }
+
+        val outputFile = File(
+            pictureDir,
+            "xin_${TIMESTAMP_FORMAT.format(Date())}.jpg"
+        )
+        val outputOptions = ImageCapture.OutputFileOptions.Builder(outputFile).build()
+
+        captureUseCase.takePicture(
+            outputOptions,
+            ContextCompat.getMainExecutor(context),
+            object : ImageCapture.OnImageSavedCallback {
+                override fun onImageSaved(
+                    outputFileResults: ImageCapture.OutputFileResults
+                ) {
+                    onSaved(outputFile.absolutePath)
+                }
+
+                override fun onError(exception: ImageCaptureException) {
+                    onError(exception.message ?: "Capture failed")
+                }
+            }
+        )
     }
 
     fun setZoomRatio(zoomRatio: Float) {
@@ -158,6 +220,7 @@ class CameraPreviewController(
             {
                 providerFuture.get().unbindAll()
                 camera = null
+                imageCapture = null
             },
             ContextCompat.getMainExecutor(context)
         )
@@ -241,5 +304,9 @@ class CameraPreviewController(
         }.build()
 
         camera2Control.setCaptureRequestOptions(requestOptions)
+    }
+
+    private companion object {
+        val TIMESTAMP_FORMAT = SimpleDateFormat("yyyyMMdd_HHmmss_SSS", Locale.US)
     }
 }

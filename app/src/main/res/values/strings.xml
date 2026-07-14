@@ -6,7 +6,7 @@
     <string name="camera_switch_lens">切换镜头</string>
     <string name="camera_flash_on">闪光灯已开</string>
     <string name="camera_flash_off">闪光灯已关</string>
-    <string name="camera_flash_unavailable">当前镜头无闪光灯</string>
+    <string name="camera_flash_unavailable">无闪光灯</string>
     <string name="camera_tap_focus_hint">点击画面可对焦，双指可缩放</string>
     <string name="camera_preview_label">实时预览</string>
     <string name="camera_zoom_label">变焦</string>
@@ -34,4 +34,8 @@
     <string name="camera_white_balance_cloudy">多云</string>
     <string name="camera_white_balance_shade">阴影</string>
     <string name="camera_white_balance_status">白平衡已切换为 %1$s</string>
+    <string name="camera_capture_button">拍摄</string>
+    <string name="camera_capture_busy">保存中</string>
+    <string name="camera_capture_in_progress">正在拍摄并保存照片…</string>
+    <string name="camera_capture_saved">照片已保存：%1$s</string>
 </resources>
