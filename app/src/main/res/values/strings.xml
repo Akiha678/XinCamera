@@ -1,0 +1,18 @@
+<resources>
+    <string name="app_name">XinCamera</string>
+    <string name="camera_permission_title">需要相机权限</string>
+    <string name="camera_permission_message">请授予相机权限以启用实时预览和专业控制。</string>
+    <string name="camera_permission_action">授权相机</string>
+    <string name="camera_switch_lens">切换镜头</string>
+    <string name="camera_flash_on">闪光灯已开</string>
+    <string name="camera_flash_off">闪光灯已关</string>
+    <string name="camera_flash_unavailable">当前镜头无闪光灯</string>
+    <string name="camera_tap_focus_hint">点击画面可对焦，双指可缩放</string>
+    <string name="camera_preview_label">实时预览</string>
+    <string name="camera_zoom_label">变焦</string>
+    <string name="camera_focus_locked">对焦完成</string>
+    <string name="camera_rear_lens">后置镜头</string>
+    <string name="camera_front_lens">前置镜头</string>
+    <string name="camera_rear_active">已切换到后置镜头</string>
+    <string name="camera_front_active">已切换到前置镜头</string>
+</resources>
