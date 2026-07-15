@@ -1,4 +1,4 @@
-package com.seanchen.xincamera.ui
+package com.seanchen.xincamera.ui.screen
 
 import android.Manifest
 import android.annotation.SuppressLint
@@ -17,6 +17,7 @@ import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -37,7 +38,6 @@ import androidx.compose.foundation.layout.systemBars
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Button
-import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Slider
@@ -64,6 +64,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.core.content.ContextCompat
@@ -189,6 +190,7 @@ private fun CameraScreen(
     var selectedWhiteBalanceIndex by rememberSaveable {
         mutableIntStateOf(WhiteBalancePreset.AUTO.ordinal)
     }
+    var histogramBins by remember { mutableStateOf(IntArray(256)) }
     val focusScope = rememberCoroutineScope()
     val whiteBalancePreset = WhiteBalancePreset.entries[selectedWhiteBalanceIndex]
 
@@ -202,7 +204,7 @@ private fun CameraScreen(
                     val didFocus = cameraController.focusAt(event.x, event.y)
                     if (didFocus) {
                         focusPoint = Offset(event.x / width, event.y / height)
-                        statusMessage = context.getString(R.string.camera_focus_locked)
+                        statusMessage = "对焦完成"
                         focusScope.launch {
                             delay(900)
                             focusPoint = null
@@ -265,6 +267,9 @@ private fun CameraScreen(
                 if (!capabilities.supportsManualExposure) {
                     manualExposureEnabled = false
                 }
+            },
+            onHistogramChanged = { histogram ->
+                histogramBins = histogram
             },
             onError = { error ->
                 statusMessage = error
@@ -338,6 +343,14 @@ private fun CameraScreen(
                 )
         )
 
+        HistogramOverlay(
+            histogram = histogramBins,
+            modifier = Modifier
+                .align(Alignment.TopEnd)
+                .padding(WindowInsets.systemBars.asPaddingValues())
+                .padding(top = 112.dp, end = 16.dp)
+        )
+
         Column(
             modifier = Modifier
                 .fillMaxSize()
@@ -367,7 +380,7 @@ private fun CameraScreen(
                     if (torchAvailable) {
                         cameraController.setTorchEnabled(!torchEnabled)
                     } else {
-                        statusMessage = context.getString(R.string.camera_flash_unavailable)
+                        statusMessage = "无闪光灯"
                     }
                 },
                 onCapture = {
@@ -375,14 +388,11 @@ private fun CameraScreen(
                         return@CameraBottomControls
                     }
                     isCapturing = true
-                    statusMessage = context.getString(R.string.camera_capture_in_progress)
+                    statusMessage = "正在拍摄"
                     cameraController.capturePhoto(
                         onSaved = { outputPath ->
                             isCapturing = false
-                            statusMessage = context.getString(
-                                R.string.camera_capture_saved,
-                                outputPath
-                            )
+                            statusMessage = ""
                         },
                         onError = { error ->
                             isCapturing = false
@@ -397,9 +407,9 @@ private fun CameraScreen(
                         CameraSelector.LENS_FACING_BACK
                     }
                     statusMessage = if (lensFacing == CameraSelector.LENS_FACING_BACK) {
-                        context.getString(R.string.camera_rear_active)
+                        "已切换至后置摄像头"
                     } else {
-                        context.getString(R.string.camera_front_active)
+                        "已切换至前置摄像头"
                     }
                 }
             )
@@ -425,14 +435,10 @@ private fun CameraScreen(
                     if (professionalCapabilities.supportsManualExposure) {
                         manualExposureEnabled = enabled
                         statusMessage = if (enabled) {
-                            context.getString(R.string.camera_manual_enabled)
+                            "手动曝光"
                         } else {
-                            context.getString(R.string.camera_manual_disabled)
+                            "自动曝光"
                         }
-                    } else {
-                        statusMessage = context.getString(
-                            R.string.camera_manual_exposure_unsupported
-                        )
                     }
                 },
                 onIsoChanged = { iso ->
@@ -449,10 +455,6 @@ private fun CameraScreen(
                 },
                 onWhiteBalanceChanged = { preset ->
                     selectedWhiteBalanceIndex = preset.ordinal
-                    statusMessage = context.getString(
-                        R.string.camera_white_balance_status,
-                        whiteBalanceLabel(context, preset)
-                    )
                 }
             )
         }
@@ -462,6 +464,48 @@ private fun CameraScreen(
                 x = (maxWidth * normalizedPoint.x) - 28.dp,
                 y = (maxHeight * normalizedPoint.y) - 28.dp
             )
+        }
+    }
+}
+
+@Composable
+private fun HistogramOverlay(
+    histogram: IntArray,
+    modifier: Modifier = Modifier
+) {
+    Surface(
+        modifier = modifier.size(width = 180.dp, height = 104.dp),
+        shape = RoundedCornerShape(8.dp),
+        color = Color(0xB311161C),
+        border = BorderStroke(1.dp, Color(0x66FFFFFF))
+    ) {
+        Column(
+            modifier = Modifier.padding(10.dp),
+            verticalArrangement = Arrangement.spacedBy(6.dp)
+        ) {
+            Text(
+                text = stringResource(R.string.camera_histogram_title),
+                color = Color.White,
+                style = MaterialTheme.typography.labelMedium
+            )
+            Canvas(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(62.dp)
+            ) {
+                val maxCount = histogram.maxOrNull()?.takeIf { it > 0 } ?: 1
+                val barWidth = size.width / histogram.size
+                histogram.forEachIndexed { index, count ->
+                    val normalizedHeight = size.height * count / maxCount
+                    val x = index * barWidth
+                    drawLine(
+                        color = Color(0xFFFFD39A),
+                        start = Offset(x, size.height),
+                        end = Offset(x, size.height - normalizedHeight),
+                        strokeWidth = (barWidth * 0.8f).coerceAtLeast(1f)
+                    )
+                }
+            }
         }
     }
 }
@@ -808,8 +852,8 @@ private fun StatusChip(
 
 @Composable
 private fun FocusRing(
-    x: androidx.compose.ui.unit.Dp,
-    y: androidx.compose.ui.unit.Dp
+    x: Dp,
+    y: Dp
 ) {
     Surface(
         modifier = Modifier

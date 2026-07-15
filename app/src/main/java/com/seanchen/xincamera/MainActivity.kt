@@ -5,8 +5,8 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.compose.material3.Surface
-import com.seanchen.xincamera.image.NativeBridge
-import com.seanchen.xincamera.ui.CameraApp
+import com.seanchen.xincamera.nativebridge.NativeBridge
+import com.seanchen.xincamera.ui.screen.CameraApp
 import com.seanchen.xincamera.ui.theme.XinCameraTheme
 
 class MainActivity : ComponentActivity() {

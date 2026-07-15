@@ -4,6 +4,7 @@ import android.content.Context
 import android.hardware.camera2.CameraCharacteristics
 import android.hardware.camera2.CaptureRequest
 import android.os.Environment
+import android.os.SystemClock
 import android.provider.MediaStore
 import androidx.annotation.OptIn
 import androidx.camera.camera2.interop.Camera2CameraControl
@@ -13,8 +14,10 @@ import androidx.camera.camera2.interop.ExperimentalCamera2Interop
 import androidx.camera.core.Camera
 import androidx.camera.core.CameraSelector
 import androidx.camera.core.FocusMeteringAction
+import androidx.camera.core.ImageAnalysis
 import androidx.camera.core.ImageCapture
 import androidx.camera.core.ImageCaptureException
+import androidx.camera.core.ImageProxy
 import androidx.camera.core.Preview
 import androidx.camera.core.TorchState
 import androidx.camera.core.ZoomState
@@ -23,9 +26,12 @@ import androidx.camera.view.PreviewView
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.LifecycleOwner
 import androidx.lifecycle.Observer
+import com.seanchen.xincamera.nativebridge.NativeBridge
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
+import java.util.concurrent.ExecutorService
+import java.util.concurrent.Executors
 import java.util.concurrent.TimeUnit
 
 /**
@@ -35,17 +41,21 @@ import java.util.concurrent.TimeUnit
  * 1. 预览绑定
  * 2. 变焦 / 点击对焦 / 手电筒
  * 3. 拍照
- * 4. 第二部分专业模式参数下发
+ * 4. 第三部分直方图分析
+ * 5. 第二部分专业模式参数下发
  */
 class CameraPreviewController(
     private val context: Context
 ) {
     private var camera: Camera? = null
     private var imageCapture: ImageCapture? = null
+    private var imageAnalysis: ImageAnalysis? = null
     private var previewView: PreviewView? = null
     private var zoomObserver: Observer<ZoomState>? = null
     private var torchObserver: Observer<Int>? = null
     private var professionalSettings = ProfessionalCameraSettings()
+    private val analysisExecutor: ExecutorService = Executors.newSingleThreadExecutor()
+    private var lastHistogramAtMs = 0L
 
     fun bindToLifecycle(
         lifecycleOwner: LifecycleOwner,
@@ -55,6 +65,7 @@ class CameraPreviewController(
         onTorchAvailabilityChanged: (Boolean) -> Unit,
         onTorchStateChanged: (Boolean) -> Unit,
         onProfessionalCapabilitiesChanged: (ProfessionalCameraCapabilities) -> Unit,
+        onHistogramChanged: (IntArray) -> Unit,
         onError: (String) -> Unit
     ) {
         this.previewView = previewView
@@ -71,6 +82,18 @@ class CameraPreviewController(
                 val captureUseCase = ImageCapture.Builder()
                     .setCaptureMode(ImageCapture.CAPTURE_MODE_MINIMIZE_LATENCY)
                     .build()
+                val analysisUseCase = ImageAnalysis.Builder()
+                    .setBackpressureStrategy(ImageAnalysis.STRATEGY_KEEP_ONLY_LATEST)
+                    .build()
+                    .also { useCase ->
+                        useCase.setAnalyzer(analysisExecutor) { imageProxy ->
+                            analyzeHistogramFrame(
+                                imageProxy = imageProxy,
+                                onHistogramChanged = onHistogramChanged,
+                                onError = onError
+                            )
+                        }
+                    }
 
                 try {
                     val boundCamera = provider.bindToLifecycle(
@@ -79,10 +102,12 @@ class CameraPreviewController(
                             .requireLensFacing(lensFacing)
                             .build(),
                         preview,
-                        captureUseCase
+                        captureUseCase,
+                        analysisUseCase
                     )
                     camera = boundCamera
                     imageCapture = captureUseCase
+                    imageAnalysis = analysisUseCase
 
                     val hasFlashUnit = boundCamera.cameraInfo.hasFlashUnit()
                     onTorchAvailabilityChanged(hasFlashUnit)
@@ -229,6 +254,7 @@ class CameraPreviewController(
                 providerFuture.get().unbindAll()
                 camera = null
                 imageCapture = null
+                imageAnalysis = null
             },
             ContextCompat.getMainExecutor(context)
         )
@@ -240,6 +266,42 @@ class CameraPreviewController(
         torchObserver?.let { currentCamera.cameraInfo.torchState.removeObserver(it) }
         zoomObserver = null
         torchObserver = null
+    }
+
+    private fun analyzeHistogramFrame(
+        imageProxy: ImageProxy,
+        onHistogramChanged: (IntArray) -> Unit,
+        onError: (String) -> Unit
+    ) {
+        try {
+            val now = SystemClock.elapsedRealtime()
+            if (now - lastHistogramAtMs < HISTOGRAM_INTERVAL_MS) {
+                return
+            }
+            lastHistogramAtMs = now
+
+            val yPlane = imageProxy.planes.firstOrNull() ?: return
+            val buffer = yPlane.buffer
+            val yBytes = ByteArray(buffer.remaining())
+            buffer.get(yBytes)
+
+            val histogram = NativeBridge.computeLumaHistogram(
+                yPlane = yBytes,
+                width = imageProxy.width,
+                height = imageProxy.height,
+                rowStride = yPlane.rowStride,
+                pixelStride = yPlane.pixelStride
+            )
+            ContextCompat.getMainExecutor(context).execute {
+                onHistogramChanged(histogram)
+            }
+        } catch (error: Exception) {
+            ContextCompat.getMainExecutor(context).execute {
+                onError(error.message ?: "Histogram analysis failed")
+            }
+        } finally {
+            imageProxy.close()
+        }
     }
 
     @OptIn(ExperimentalCamera2Interop::class)
@@ -315,6 +377,7 @@ class CameraPreviewController(
     }
 
     private companion object {
+        const val HISTOGRAM_INTERVAL_MS = 120L
         val TIMESTAMP_FORMAT = SimpleDateFormat("yyyyMMdd_HHmmss_SSS", Locale.US)
     }
 }

@@ -38,4 +38,5 @@
     <string name="camera_capture_busy">保存中</string>
     <string name="camera_capture_in_progress">正在拍摄并保存照片…</string>
     <string name="camera_capture_saved">照片已保存：%1$s</string>
+    <string name="camera_histogram_title">亮度直方图</string>
 </resources>
