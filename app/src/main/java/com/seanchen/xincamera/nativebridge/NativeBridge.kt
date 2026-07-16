@@ -19,4 +19,16 @@ object NativeBridge {
         rowStride: Int,
         pixelStride: Int
     ): IntArray
+
+    /**
+     * 将 ARGB_8888 像素数组转换为灰度图。
+     *
+     * Kotlin 侧负责 Bitmap 解码和保存；JNI/C++ 侧只处理像素计算，便于后续继续扩展滤镜算法。
+     * 输入和输出都使用 Android ColorInt 格式：0xAARRGGBB。
+     */
+    external fun applyGrayscaleArgb8888(
+        pixels: IntArray,
+        width: Int,
+        height: Int
+    ): IntArray
 }

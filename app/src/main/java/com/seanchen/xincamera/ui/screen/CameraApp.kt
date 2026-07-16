@@ -183,6 +183,8 @@ private fun CameraScreen(
     var focusPoint by remember { mutableStateOf<Offset?>(null) }
     var showSettingsPanel by rememberSaveable { mutableStateOf(false) }
     var isCapturing by rememberSaveable { mutableStateOf(false) }
+    var isProcessingGrayscale by rememberSaveable { mutableStateOf(false) }
+    var lastCapturedUri by rememberSaveable { mutableStateOf<String?>(null) }
     var manualExposureEnabled by rememberSaveable { mutableStateOf(false) }
     var professionalCapabilities by remember {
         mutableStateOf(ProfessionalCameraCapabilities())
@@ -361,6 +363,8 @@ private fun CameraScreen(
                 torchEnabled = torchEnabled,
                 torchAvailable = torchAvailable,
                 isCapturing = isCapturing,
+                isProcessingGrayscale = isProcessingGrayscale,
+                hasCapturedPhoto = lastCapturedUri != null,
                 onZoomChanged = cameraController::setZoomRatio,
                 onToggleTorch = {
                     if (torchAvailable) {
@@ -378,10 +382,34 @@ private fun CameraScreen(
                     cameraController.capturePhoto(
                         onSaved = { outputPath ->
                             isCapturing = false
+                            lastCapturedUri = outputPath.takeIf { it.startsWith("content://") }
                             statusMessage = ""
                         },
                         onError = { error ->
                             isCapturing = false
+                            statusMessage = error
+                        }
+                    )
+                },
+                onCreateGrayscale = {
+                    val sourceUri = lastCapturedUri
+                    if (sourceUri == null) {
+                        statusMessage = "请先拍摄照片"
+                        return@CameraBottomControls
+                    }
+                    if (isProcessingGrayscale) {
+                        return@CameraBottomControls
+                    }
+                    isProcessingGrayscale = true
+                    statusMessage = "正在生成灰度图"
+                    cameraController.saveGrayscaleCopy(
+                        sourceUriString = sourceUri,
+                        onSaved = {
+                            isProcessingGrayscale = false
+                            statusMessage = "灰度图已保存到相册"
+                        },
+                        onError = { error ->
+                            isProcessingGrayscale = false
                             statusMessage = error
                         }
                     )
@@ -504,9 +532,12 @@ private fun CameraBottomControls(
     torchEnabled: Boolean,
     torchAvailable: Boolean,
     isCapturing: Boolean,
+    isProcessingGrayscale: Boolean,
+    hasCapturedPhoto: Boolean,
     onZoomChanged: (Float) -> Unit,
     onToggleTorch: () -> Unit,
     onCapture: () -> Unit,
+    onCreateGrayscale: () -> Unit,
     onSwitchLens: () -> Unit
 ) {
     Surface(
@@ -555,12 +586,25 @@ private fun CameraBottomControls(
                     onClick = onCapture
                 )
 
-                ToolIconButton(
-                    isActive = false,
-                    isEnabled = true,
-                    onClick = onSwitchLens
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(12.dp),
+                    verticalAlignment = Alignment.CenterVertically
                 ) {
-                    SwitchCameraGlyph()
+                    ToolIconButton(
+                        isActive = isProcessingGrayscale,
+                        isEnabled = hasCapturedPhoto && !isProcessingGrayscale,
+                        onClick = onCreateGrayscale
+                    ) {
+                        GrayscaleGlyph(isActive = isProcessingGrayscale)
+                    }
+
+                    ToolIconButton(
+                        isActive = false,
+                        isEnabled = true,
+                        onClick = onSwitchLens
+                    ) {
+                        SwitchCameraGlyph()
+                    }
                 }
             }
         }
@@ -613,6 +657,50 @@ private fun FlashGlyph(
             close()
         }
         drawPath(path, color)
+    }
+}
+
+@Composable
+private fun GrayscaleGlyph(
+    isActive: Boolean
+) {
+    Canvas(modifier = Modifier.size(28.dp)) {
+        val stroke = Stroke(width = 2.dp.toPx(), cap = StrokeCap.Round)
+        val frameColor = if (isActive) Color(0xFF11161C) else Color.White
+        val darkTone = if (isActive) Color(0xFF11161C) else Color(0xFF8F99A6)
+        val lightTone = if (isActive) Color(0xFF4D5560) else Color(0xFFE7EBEF)
+        val circleTopLeft = Offset(size.width * 0.08f, size.height * 0.08f)
+        val circleSize = Size(size.width * 0.84f, size.height * 0.84f)
+
+        drawArc(
+            color = darkTone,
+            startAngle = 90f,
+            sweepAngle = 180f,
+            useCenter = true,
+            topLeft = circleTopLeft,
+            size = circleSize
+        )
+        drawArc(
+            color = lightTone,
+            startAngle = -90f,
+            sweepAngle = 180f,
+            useCenter = true,
+            topLeft = circleTopLeft,
+            size = circleSize
+        )
+        drawCircle(
+            color = frameColor,
+            radius = size.minDimension * 0.46f,
+            center = center,
+            style = stroke
+        )
+        drawLine(
+            color = frameColor,
+            start = Offset(size.width * 0.50f, size.height * 0.12f),
+            end = Offset(size.width * 0.50f, size.height * 0.88f),
+            strokeWidth = 1.6.dp.toPx(),
+            cap = StrokeCap.Round
+        )
     }
 }
 

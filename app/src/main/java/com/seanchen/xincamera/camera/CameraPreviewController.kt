@@ -1,8 +1,13 @@
 package com.seanchen.xincamera.camera
 
 import android.content.Context
+import android.content.ContentValues
+import android.graphics.Bitmap
+import android.graphics.ImageDecoder
 import android.hardware.camera2.CameraCharacteristics
 import android.hardware.camera2.CaptureRequest
+import android.net.Uri
+import android.os.Build
 import android.os.Environment
 import android.os.SystemClock
 import android.provider.MediaStore
@@ -55,6 +60,7 @@ class CameraPreviewController(
     private var torchObserver: Observer<Int>? = null
     private var professionalSettings = ProfessionalCameraSettings()
     private val analysisExecutor: ExecutorService = Executors.newSingleThreadExecutor()
+    private val imageProcessingExecutor: ExecutorService = Executors.newSingleThreadExecutor()
     private var lastHistogramAtMs = 0L
 
     fun bindToLifecycle(
@@ -210,6 +216,58 @@ class CameraPreviewController(
         )
     }
 
+    /**
+     * 第四部分灰度图处理。
+     *
+     * 这里负责相册 URI 的读取和保存，真正的灰度算法在 JNI/C++ 中执行。
+     * 处理完成后会写入一张新的 JPEG 到系统相册 Pictures/XinCamera。
+     */
+    fun saveGrayscaleCopy(
+        sourceUriString: String,
+        onSaved: (String) -> Unit,
+        onError: (String) -> Unit
+    ) {
+        imageProcessingExecutor.execute {
+            try {
+                val sourceUri = Uri.parse(sourceUriString)
+                val sourceBitmap = decodeBitmap(sourceUri)
+                val argbBitmap = sourceBitmap.copy(Bitmap.Config.ARGB_8888, false)
+                if (argbBitmap !== sourceBitmap) {
+                    sourceBitmap.recycle()
+                }
+
+                val width = argbBitmap.width
+                val height = argbBitmap.height
+                val pixels = IntArray(width * height)
+                argbBitmap.getPixels(pixels, 0, width, 0, 0, width, height)
+
+                val grayscalePixels = NativeBridge.applyGrayscaleArgb8888(
+                    pixels = pixels,
+                    width = width,
+                    height = height
+                )
+                if (grayscalePixels.size != pixels.size) {
+                    throw IllegalStateException("Native grayscale conversion failed")
+                }
+
+                val grayscaleBitmap = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888)
+                grayscaleBitmap.setPixels(grayscalePixels, 0, width, 0, 0, width, height)
+                val savedUri = saveBitmapToGallery(grayscaleBitmap)
+
+                argbBitmap.recycle()
+                grayscaleBitmap.recycle()
+
+                ContextCompat.getMainExecutor(context).execute {
+                    onSaved(savedUri.toString())
+                }
+            } catch (error: Exception) {
+                ContextCompat.getMainExecutor(context).execute {
+                    onError(error.message ?: "Grayscale processing failed")
+                }
+            }
+        }
+    }
+
     fun setZoomRatio(zoomRatio: Float) {
         val zoomState = camera?.cameraInfo?.zoomState?.value ?: return
         val clampedZoom = zoomRatio.coerceIn(zoomState.minZoomRatio, zoomState.maxZoomRatio)
@@ -301,6 +359,56 @@ class CameraPreviewController(
             }
         } finally {
             imageProxy.close()
+        }
+    }
+
+    @Suppress("DEPRECATION")
+    private fun decodeBitmap(uri: Uri): Bitmap {
+        return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+            val source = ImageDecoder.createSource(context.contentResolver, uri)
+            ImageDecoder.decodeBitmap(source) { decoder, _, _ ->
+                decoder.allocator = ImageDecoder.ALLOCATOR_SOFTWARE
+                decoder.isMutableRequired = false
+            }
+        } else {
+            MediaStore.Images.Media.getBitmap(context.contentResolver, uri)
+        }
+    }
+
+    private fun saveBitmapToGallery(bitmap: Bitmap): Uri {
+        val contentValues = ContentValues().apply {
+            put(MediaStore.MediaColumns.DISPLAY_NAME, "xin_gray_${TIMESTAMP_FORMAT.format(Date())}")
+            put(MediaStore.MediaColumns.MIME_TYPE, "image/jpeg")
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                put(
+                    MediaStore.Images.Media.RELATIVE_PATH,
+                    "${Environment.DIRECTORY_PICTURES}/XinCamera"
+                )
+                put(MediaStore.Images.Media.IS_PENDING, 1)
+            }
+        }
+        val uri = context.contentResolver.insert(
+            MediaStore.Images.Media.EXTERNAL_CONTENT_URI,
+            contentValues
+        ) ?: throw IllegalStateException("Cannot create gallery item")
+
+        try {
+            context.contentResolver.openOutputStream(uri)?.use { outputStream ->
+                if (!bitmap.compress(Bitmap.CompressFormat.JPEG, 95, outputStream)) {
+                    throw IllegalStateException("Cannot encode grayscale image")
+                }
+            } ?: throw IllegalStateException("Cannot open gallery output stream")
+
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                val finalizeValues = ContentValues().apply {
+                    put(MediaStore.Images.Media.IS_PENDING, 0)
+                }
+                context.contentResolver.update(uri, finalizeValues, null, null)
+            }
+            return uri
+        } catch (error: Exception) {
+            context.contentResolver.delete(uri, null, null)
+            throw error
         }
     }
 
