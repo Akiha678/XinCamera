@@ -39,7 +39,6 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Button
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Slider
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -59,8 +58,11 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextOverflow
@@ -321,34 +323,17 @@ private fun CameraScreen(
             modifier = Modifier.fillMaxSize()
         )
 
-        Box(
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(170.dp)
-                .background(
-                    Brush.verticalGradient(
-                        colors = listOf(Color(0xB3000000), Color.Transparent)
-                    )
-                )
-        )
-        Box(
-            modifier = Modifier
-                .align(Alignment.BottomCenter)
-                .fillMaxWidth()
-                .height(330.dp)
-                .background(
-                    Brush.verticalGradient(
-                        colors = listOf(Color.Transparent, Color(0xE6000000))
-                    )
-                )
-        )
+        TopSafeGradient()
+        Box(modifier = Modifier.align(Alignment.BottomCenter)) {
+            BottomSafeGradient()
+        }
 
         HistogramOverlay(
             histogram = histogramBins,
             modifier = Modifier
                 .align(Alignment.TopEnd)
                 .padding(WindowInsets.systemBars.asPaddingValues())
-                .padding(top = 112.dp, end = 16.dp)
+                .padding(top = 96.dp, end = 16.dp)
         )
 
         Column(
@@ -358,11 +343,12 @@ private fun CameraScreen(
                 .padding(horizontal = 16.dp, vertical = 12.dp),
             verticalArrangement = Arrangement.SpaceBetween
         ) {
-            CameraTopBar(
+            CameraHud(
                 nativeStatus = nativeStatus,
                 zoomRatio = zoomRatio,
                 lensFacing = lensFacing,
                 manualExposureEnabled = manualExposureEnabled,
+                whiteBalancePreset = whiteBalancePreset,
                 showSettingsPanel = showSettingsPanel,
                 statusMessage = statusMessage,
                 onToggleSettings = { showSettingsPanel = !showSettingsPanel }
@@ -511,58 +497,6 @@ private fun HistogramOverlay(
 }
 
 @Composable
-private fun CameraTopBar(
-    nativeStatus: String,
-    zoomRatio: Float,
-    lensFacing: Int,
-    manualExposureEnabled: Boolean,
-    showSettingsPanel: Boolean,
-    statusMessage: String,
-    onToggleSettings: () -> Unit
-) {
-    Column(
-        verticalArrangement = Arrangement.spacedBy(10.dp)
-    ) {
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                StatusChip(label = stringResource(R.string.camera_preview_label))
-                StatusChip(label = nativeStatus)
-            }
-            SettingPill(
-                isActive = showSettingsPanel,
-                onClick = onToggleSettings
-            )
-        }
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            StatusChip(label = "${String.format("%.1f", zoomRatio)}x")
-            StatusChip(
-                label = if (lensFacing == CameraSelector.LENS_FACING_BACK) {
-                    stringResource(R.string.camera_rear_lens)
-                } else {
-                    stringResource(R.string.camera_front_lens)
-                }
-            )
-            if (manualExposureEnabled) {
-                StatusChip(label = stringResource(R.string.camera_manual_badge))
-            }
-        }
-        Text(
-            text = statusMessage.ifBlank {
-                stringResource(R.string.camera_tap_focus_hint)
-            },
-            color = Color(0xFFE1E7EE),
-            style = MaterialTheme.typography.bodyMedium,
-            maxLines = 2,
-            overflow = TextOverflow.Ellipsis
-        )
-    }
-}
-
-@Composable
 private fun CameraBottomControls(
     zoomRatio: Float,
     minZoomRatio: Float,
@@ -575,54 +509,378 @@ private fun CameraBottomControls(
     onCapture: () -> Unit,
     onSwitchLens: () -> Unit
 ) {
-    Column(
-        verticalArrangement = Arrangement.spacedBy(16.dp)
+    Surface(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(28.dp),
+        color = Color(0xB30B1016),
+        border = BorderStroke(1.dp, Color(0x22FFFFFF))
     ) {
-        Text(
-            text = stringResource(R.string.camera_zoom_label),
-            color = Color.White,
-            style = MaterialTheme.typography.labelLarge
-        )
-        Slider(
-            value = zoomRatio.coerceIn(minZoomRatio, maxZoomRatio),
-            onValueChange = onZoomChanged,
-            valueRange = minZoomRatio..maxZoomRatio
-        )
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
+        Column(
+            modifier = Modifier.padding(horizontal = 18.dp, vertical = 16.dp),
+            verticalArrangement = Arrangement.spacedBy(14.dp)
         ) {
-            OutlinedButton(
-                onClick = onToggleTorch,
-                modifier = Modifier.weight(1f)
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
+                verticalAlignment = Alignment.CenterVertically
             ) {
                 Text(
-                    text = when {
-                        !torchAvailable -> stringResource(R.string.camera_flash_unavailable)
-                        torchEnabled -> stringResource(R.string.camera_flash_on)
-                        else -> stringResource(R.string.camera_flash_off)
-                    },
-                    maxLines = 1
+                    text = "${String.format("%.1f", zoomRatio)}x",
+                    color = Color.White,
+                    style = MaterialTheme.typography.labelLarge
+                )
+                Slider(
+                    modifier = Modifier.weight(1f),
+                    value = zoomRatio.coerceIn(minZoomRatio, maxZoomRatio),
+                    onValueChange = onZoomChanged,
+                    valueRange = minZoomRatio..maxZoomRatio
                 )
             }
 
-            CaptureButton(
-                isCapturing = isCapturing,
-                onClick = onCapture
-            )
-
-            OutlinedButton(
-                onClick = onSwitchLens,
-                modifier = Modifier.weight(1f)
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
             ) {
-                Text(
-                    text = stringResource(R.string.camera_switch_lens),
-                    maxLines = 1
+                ToolIconButton(
+                    isActive = torchEnabled,
+                    isEnabled = torchAvailable,
+                    onClick = onToggleTorch
+                ) {
+                    FlashGlyph(isActive = torchEnabled, isEnabled = torchAvailable)
+                }
+
+                CaptureButton(
+                    isCapturing = isCapturing,
+                    onClick = onCapture
                 )
+
+                ToolIconButton(
+                    isActive = false,
+                    isEnabled = true,
+                    onClick = onSwitchLens
+                ) {
+                    SwitchCameraGlyph()
+                }
             }
         }
     }
+}
+
+@Composable
+private fun ToolIconButton(
+    isActive: Boolean,
+    isEnabled: Boolean,
+    onClick: () -> Unit,
+    icon: @Composable () -> Unit
+) {
+    Box(
+        modifier = Modifier
+            .size(56.dp)
+            .clip(CircleShape)
+            .background(
+                when {
+                    !isEnabled -> Color(0x552A313A)
+                    isActive -> Color(0xFFFFD39A)
+                    else -> Color(0xCC1B222B)
+                }
+            )
+            .clickable(enabled = isEnabled, onClick = onClick),
+        contentAlignment = Alignment.Center
+    ) {
+        icon()
+    }
+}
+
+@Composable
+private fun FlashGlyph(
+    isActive: Boolean,
+    isEnabled: Boolean
+) {
+    val color = when {
+        !isEnabled -> Color(0x77FFFFFF)
+        isActive -> Color(0xFF11161C)
+        else -> Color.White
+    }
+    Canvas(modifier = Modifier.size(26.dp)) {
+        val path = androidx.compose.ui.graphics.Path().apply {
+            moveTo(size.width * 0.58f, 0f)
+            lineTo(size.width * 0.22f, size.height * 0.54f)
+            lineTo(size.width * 0.50f, size.height * 0.54f)
+            lineTo(size.width * 0.38f, size.height)
+            lineTo(size.width * 0.78f, size.height * 0.40f)
+            lineTo(size.width * 0.50f, size.height * 0.40f)
+            close()
+        }
+        drawPath(path, color)
+    }
+}
+
+@Composable
+private fun SwitchCameraGlyph() {
+    Canvas(modifier = Modifier.size(28.dp)) {
+        val stroke = Stroke(width = 2.4.dp.toPx(), cap = StrokeCap.Round)
+        val arcSize = Size(size.width * 0.70f, size.height * 0.70f)
+        drawArc(
+            color = Color.White,
+            startAngle = 210f,
+            sweepAngle = 245f,
+            useCenter = false,
+            topLeft = Offset(size.width * 0.12f, size.height * 0.08f),
+            size = arcSize,
+            style = stroke
+        )
+        drawArc(
+            color = Color.White,
+            startAngle = 30f,
+            sweepAngle = 245f,
+            useCenter = false,
+            topLeft = Offset(size.width * 0.18f, size.height * 0.20f),
+            size = arcSize,
+            style = stroke
+        )
+        drawLine(
+            color = Color.White,
+            start = Offset(size.width * 0.72f, size.height * 0.10f),
+            end = Offset(size.width * 0.88f, size.height * 0.18f),
+            strokeWidth = 2.4.dp.toPx(),
+            cap = StrokeCap.Round
+        )
+        drawLine(
+            color = Color.White,
+            start = Offset(size.width * 0.88f, size.height * 0.18f),
+            end = Offset(size.width * 0.78f, size.height * 0.34f),
+            strokeWidth = 2.4.dp.toPx(),
+            cap = StrokeCap.Round
+        )
+        drawLine(
+            color = Color.White,
+            start = Offset(size.width * 0.28f, size.height * 0.90f),
+            end = Offset(size.width * 0.12f, size.height * 0.82f),
+            strokeWidth = 2.4.dp.toPx(),
+            cap = StrokeCap.Round
+        )
+        drawLine(
+            color = Color.White,
+            start = Offset(size.width * 0.12f, size.height * 0.82f),
+            end = Offset(size.width * 0.22f, size.height * 0.66f),
+            strokeWidth = 2.4.dp.toPx(),
+            cap = StrokeCap.Round
+        )
+    }
+}
+
+@Composable
+private fun SettingsGlyph(
+    isActive: Boolean
+) {
+    val color = if (isActive) Color(0xFF11161C) else Color.White
+    Canvas(modifier = Modifier.size(26.dp)) {
+        val stroke = Stroke(width = 2.2.dp.toPx(), cap = StrokeCap.Round)
+        val yPositions = listOf(0.28f, 0.50f, 0.72f)
+        val knobPositions = listOf(0.66f, 0.34f, 0.58f)
+        yPositions.forEachIndexed { index, yFactor ->
+            val y = size.height * yFactor
+            drawLine(
+                color = color,
+                start = Offset(size.width * 0.18f, y),
+                end = Offset(size.width * 0.82f, y),
+                strokeWidth = 2.2.dp.toPx(),
+                cap = StrokeCap.Round
+            )
+            drawCircle(
+                color = color,
+                radius = 3.4.dp.toPx(),
+                center = Offset(size.width * knobPositions[index], y)
+            )
+        }
+    }
+}
+
+@Composable
+private fun CaptureRingGlyph(
+    isCapturing: Boolean
+) {
+    Canvas(modifier = Modifier.size(78.dp)) {
+        drawCircle(
+            color = Color.White,
+            radius = size.minDimension / 2f,
+            center = center
+        )
+        drawCircle(
+            color = if (isCapturing) Color(0xFFFFD39A) else Color(0xFF05070A),
+            radius = size.minDimension * 0.40f,
+            center = center
+        )
+        drawCircle(
+            color = Color.White,
+            radius = size.minDimension * 0.30f,
+            center = center
+        )
+        if (isCapturing) {
+            drawCircle(
+                color = Color(0xFF11161C),
+                radius = size.minDimension * 0.16f,
+                center = center
+            )
+        }
+    }
+}
+
+@Composable
+private fun GlassPanel(
+    modifier: Modifier = Modifier,
+    content: @Composable () -> Unit
+) {
+    Surface(
+        modifier = modifier,
+        shape = RoundedCornerShape(18.dp),
+        color = Color(0xB311161C),
+        border = BorderStroke(1.dp, Color(0x22FFFFFF)),
+        content = content
+    )
+}
+
+@Composable
+private fun MiniMeterLabel(
+    label: String,
+    value: String
+) {
+    Column(
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.spacedBy(2.dp)
+    ) {
+        Text(
+            text = label,
+            color = Color(0x99FFFFFF),
+            style = MaterialTheme.typography.labelSmall
+        )
+        Text(
+            text = value,
+            color = Color.White,
+            style = MaterialTheme.typography.labelMedium
+        )
+    }
+}
+
+@Composable
+private fun CameraModeStrip(
+    manualExposureEnabled: Boolean,
+    whiteBalancePreset: WhiteBalancePreset
+) {
+    GlassPanel {
+        Row(
+            modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp),
+            horizontalArrangement = Arrangement.spacedBy(18.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            MiniMeterLabel(label = "MODE", value = if (manualExposureEnabled) "PRO" else "AUTO")
+            MiniMeterLabel(label = "WB", value = whiteBalancePreset.name.take(4))
+        }
+    }
+}
+
+@Composable
+private fun StatusText(
+    statusMessage: String
+) {
+    Text(
+        text = statusMessage.ifBlank {
+            stringResource(R.string.camera_tap_focus_hint)
+        },
+        color = Color(0xDDEAF0F6),
+        style = MaterialTheme.typography.bodySmall,
+        maxLines = 2,
+        overflow = TextOverflow.Ellipsis
+    )
+}
+
+@Composable
+private fun CameraHud(
+    nativeStatus: String,
+    zoomRatio: Float,
+    lensFacing: Int,
+    manualExposureEnabled: Boolean,
+    whiteBalancePreset: WhiteBalancePreset,
+    showSettingsPanel: Boolean,
+    statusMessage: String,
+    onToggleSettings: () -> Unit
+) {
+    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.Top
+        ) {
+            GlassPanel {
+                Row(
+                    modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp),
+                    horizontalArrangement = Arrangement.spacedBy(10.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = String.format("%.1fx", zoomRatio),
+                        color = Color.White,
+                        style = MaterialTheme.typography.labelLarge
+                    )
+                    Box(
+                        modifier = Modifier
+                            .size(width = 1.dp, height = 16.dp)
+                            .background(Color(0x33FFFFFF))
+                    )
+                    Text(
+                        text = if (lensFacing == CameraSelector.LENS_FACING_BACK) "REAR" else "FRONT",
+                        color = Color(0xCCFFFFFF),
+                        style = MaterialTheme.typography.labelMedium
+                    )
+                    if (manualExposureEnabled) {
+                        Text(
+                            text = "PRO",
+                            color = Color(0xFFFFD39A),
+                            style = MaterialTheme.typography.labelMedium
+                        )
+                    }
+                }
+            }
+            SettingPill(
+                isActive = showSettingsPanel,
+                onClick = onToggleSettings
+            )
+        }
+        CameraModeStrip(
+            manualExposureEnabled = manualExposureEnabled,
+            whiteBalancePreset = whiteBalancePreset
+        )
+        StatusText(statusMessage = statusMessage.ifBlank { nativeStatus })
+    }
+}
+
+@Composable
+private fun BottomSafeGradient() {
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(360.dp)
+            .background(
+                Brush.verticalGradient(
+                    colors = listOf(Color.Transparent, Color(0xF0000000))
+                )
+            )
+    )
+}
+
+@Composable
+private fun TopSafeGradient() {
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(220.dp)
+            .background(
+                Brush.verticalGradient(
+                    colors = listOf(Color(0xCC000000), Color.Transparent)
+                )
+            )
+    )
 }
 
 @Composable
@@ -788,27 +1046,11 @@ private fun CaptureButton(
             .padding(horizontal = 14.dp)
             .size(92.dp)
             .clip(CircleShape)
-            .background(if (isCapturing) Color(0xFFFFB04C) else Color.White)
+            .background(Color(0x3311161C))
             .clickable(enabled = !isCapturing, onClick = onClick),
         contentAlignment = Alignment.Center
     ) {
-        Box(
-            modifier = Modifier
-                .size(74.dp)
-                .clip(CircleShape)
-                .background(if (isCapturing) Color(0xFF1B1100) else Color(0xFF11161C)),
-            contentAlignment = Alignment.Center
-        ) {
-            Text(
-                text = if (isCapturing) {
-                    stringResource(R.string.camera_capture_busy)
-                } else {
-                    stringResource(R.string.camera_capture_button)
-                },
-                color = Color.White,
-                style = MaterialTheme.typography.labelLarge
-            )
-        }
+        CaptureRingGlyph(isCapturing = isCapturing)
     }
 }
 
@@ -819,34 +1061,13 @@ private fun SettingPill(
 ) {
     Box(
         modifier = Modifier
+            .size(52.dp)
             .clip(RoundedCornerShape(50))
             .background(if (isActive) Color(0xFFFFB04C) else Color(0x9911161C))
-            .clickable(onClick = onClick)
-            .padding(horizontal = 16.dp, vertical = 10.dp)
+            .clickable(onClick = onClick),
+        contentAlignment = Alignment.Center
     ) {
-        Text(
-            text = stringResource(R.string.camera_setting_button),
-            color = if (isActive) Color(0xFF1B1100) else Color.White,
-            style = MaterialTheme.typography.labelLarge
-        )
-    }
-}
-
-@Composable
-private fun StatusChip(
-    label: String
-) {
-    Box(
-        modifier = Modifier
-            .clip(RoundedCornerShape(50))
-            .background(Color(0x9911161C))
-            .padding(horizontal = 12.dp, vertical = 7.dp)
-    ) {
-        Text(
-            text = label,
-            color = Color.White,
-            style = MaterialTheme.typography.labelMedium
-        )
+        SettingsGlyph(isActive = isActive)
     }
 }
 
