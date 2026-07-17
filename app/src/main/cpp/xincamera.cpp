@@ -12,6 +12,7 @@ Java_com_seanchen_xincamera_nativebridge_NativeBridge_nativePreviewPipelineName(
     return env->NewStringUTF("Photon Native Engine Ready");
 }
 
+// 亮度直方图
 extern "C"
 JNIEXPORT jintArray JNICALL
 Java_com_seanchen_xincamera_nativebridge_NativeBridge_computeLumaHistogram(
