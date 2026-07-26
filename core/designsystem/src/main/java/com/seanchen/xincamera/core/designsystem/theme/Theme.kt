@@ -1,4 +1,4 @@
-package com.seanchen.xincamera.ui.theme
+package com.seanchen.xincamera.core.designsystem.theme
 
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.material3.MaterialTheme

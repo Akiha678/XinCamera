@@ -98,6 +98,7 @@ XinCamera
 │   │   │   ├── CameraSettingsManager.kt
 │   │   │   └── CameraUseCaseManager.kt
 │   │   ├── domain
+│   │   │   ├── usecase
 │   │   │   └── model
 │   │   │       └── CameraModels.kt
 │   │   ├── nativebridge
@@ -109,9 +110,6 @@ XinCamera
 │   │   │   └── CameraViewModel.kt
 │   │   ├── storage
 │   │   │   └── MediaStoreManager.kt
-│   │   └── ui
-│   │       └── theme
-│   │           └── XinCameraTheme.kt
 │   └── src/main/cpp
 │       ├── filter
 │       │   ├── grayscale_filter.cpp
@@ -121,6 +119,11 @@ XinCamera
 │       │   └── luma_histogram.h
 │       ├── CMakeLists.txt
 │       └── xincamera.cpp
+├── core
+│   ├── ui
+│   └── designsystem
+│       └── theme
+│           └── Theme.kt
 ├── gradle/libs.versions.toml
 └── README.md
 ```

@@ -24,3 +24,5 @@ dependencyResolutionManagement {
 
 rootProject.name = "XinCamera"
 include(":app")
+include(":core:designsystem")
+include(":core:ui")

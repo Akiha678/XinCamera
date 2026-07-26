@@ -1,10 +1,11 @@
 package com.seanchen.xincamera.domain.model
 
 /**
- * 专业模式下的三项核心设置。
+ * 专业模式下的三项核心设置
  *
- * `iso` 和 `exposureTimeNs` 为 null 时，表示继续使用自动曝光；
- * 白平衡使用兼容性更好的 AWB 预设模式。
+ * iso和曝光时间为null时，表示使用自动曝光
+ *
+ * 白平衡使用自动
  */
 data class ProfessionalCameraSettings(
     val iso: Int? = null,

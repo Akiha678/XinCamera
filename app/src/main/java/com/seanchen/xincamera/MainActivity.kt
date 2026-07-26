@@ -10,7 +10,7 @@ import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
 import com.seanchen.xincamera.nativebridge.NativeBridge
 import com.seanchen.xincamera.presentation.CameraApp
-import com.seanchen.xincamera.ui.theme.XinCameraTheme
+import com.seanchen.xincamera.core.designsystem.theme.XinCameraTheme
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
