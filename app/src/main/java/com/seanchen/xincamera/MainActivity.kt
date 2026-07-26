@@ -9,7 +9,7 @@ import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
 import com.seanchen.xincamera.nativebridge.NativeBridge
-import com.seanchen.xincamera.ui.screen.CameraApp
+import com.seanchen.xincamera.presentation.CameraApp
 import com.seanchen.xincamera.ui.theme.XinCameraTheme
 
 class MainActivity : ComponentActivity() {

@@ -1,21 +1,55 @@
 #include <jni.h>
-#include <algorithm>
-#include <array>
 #include <cstdint>
 #include <vector>
 
+#include "filter/grayscale_filter.h"
+#include "histogram/luma_histogram.h"
+
+namespace {
+
+jintArray NewHistogramArray(
+        JNIEnv* env,
+        const std::array<int32_t, xincamera::histogram::kHistogramBucketCount>& histogram) {
+    jintArray result = env->NewIntArray(
+            static_cast<jsize>(xincamera::histogram::kHistogramBucketCount)
+    );
+    if (result == nullptr) {
+        return nullptr;
+    }
+
+    std::vector<jint> jniHistogram(histogram.begin(), histogram.end());
+    env->SetIntArrayRegion(
+            result,
+            0,
+            static_cast<jsize>(jniHistogram.size()),
+            jniHistogram.data()
+    );
+    return result;
+}
+
+jintArray NewEmptyIntArray(JNIEnv* env) {
+    return env->NewIntArray(0);
+}
+
+} // namespace
+
 extern "C"
 JNIEXPORT jstring JNICALL
-Java_com_seanchen_xincamera_nativebridge_NativeBridge_nativePreviewPipelineName(
+Java_com_seanchen_xincamera_nativebridge_NativeMethods_nativePreviewPipelineName(
         JNIEnv* env,
         jobject /* this */) {
     return env->NewStringUTF("Photon Native Engine Ready");
 }
 
-// 亮度直方图
+/**
+ * JNI 入口层只负责 Java / C++ 数据转换。
+ *
+ * 真正的直方图算法放在 histogram/luma_histogram.cpp，避免算法代码依赖 JNIEnv、
+ * jbyteArray 等 JNI 类型，后续更容易做 native 单测和复用。
+ */
 extern "C"
 JNIEXPORT jintArray JNICALL
-Java_com_seanchen_xincamera_nativebridge_NativeBridge_computeLumaHistogram(
+Java_com_seanchen_xincamera_nativebridge_NativeMethods_computeLumaHistogram(
         JNIEnv* env,
         jobject /* this */,
         jbyteArray yPlane,
@@ -23,96 +57,79 @@ Java_com_seanchen_xincamera_nativebridge_NativeBridge_computeLumaHistogram(
         jint height,
         jint rowStride,
         jint pixelStride) {
-    std::array<jint, 256> histogram{};
-    histogram.fill(0);
-
     if (yPlane == nullptr || width <= 0 || height <= 0 || rowStride <= 0 || pixelStride <= 0) {
-        jintArray emptyResult = env->NewIntArray(256);
-        env->SetIntArrayRegion(emptyResult, 0, 256, histogram.data());
-        return emptyResult;
+        return NewHistogramArray(env, {});
     }
 
     const jsize planeLength = env->GetArrayLength(yPlane);
     jboolean isCopy = JNI_FALSE;
     jbyte* yData = env->GetByteArrayElements(yPlane, &isCopy);
-
-    if (yData != nullptr) {
-        for (jint row = 0; row < height; ++row) {
-            const jint rowStart = row * rowStride;
-            if (rowStart >= planeLength) {
-                break;
-            }
-
-            for (jint col = 0; col < width; ++col) {
-                const jint index = rowStart + col * pixelStride;
-                if (index >= planeLength) {
-                    break;
-                }
-
-                const auto luma = static_cast<unsigned char>(yData[index]);
-                histogram[luma] += 1;
-            }
-        }
-
-        env->ReleaseByteArrayElements(yPlane, yData, JNI_ABORT);
+    if (yData == nullptr) {
+        return NewHistogramArray(env, {});
     }
 
-    jintArray result = env->NewIntArray(256);
-    env->SetIntArrayRegion(result, 0, 256, histogram.data());
-    return result;
+    const auto* yPlaneData = reinterpret_cast<const uint8_t*>(yData);
+    const auto histogram = xincamera::histogram::ComputeLumaHistogram(
+            yPlaneData,
+            width,
+            height,
+            rowStride,
+            pixelStride,
+            static_cast<std::size_t>(planeLength)
+    );
+
+    env->ReleaseByteArrayElements(yPlane, yData, JNI_ABORT);
+    return NewHistogramArray(env, histogram);
 }
 
+/**
+ * 灰度 JNI 入口。
+ *
+ * Java 层传入 Bitmap 拆出的 ARGB_8888 IntArray；JNI 层检查尺寸并把数组交给 core 层。
+ * core 返回新的像素数组后，再复制成 jintArray 返回给 Kotlin。
+ */
 extern "C"
 JNIEXPORT jintArray JNICALL
-Java_com_seanchen_xincamera_nativebridge_NativeBridge_applyGrayscaleArgb8888(
+Java_com_seanchen_xincamera_nativebridge_NativeMethods_applyGrayscaleArgb8888(
         JNIEnv* env,
         jobject /* this */,
         jintArray pixels,
         jint width,
         jint height) {
     if (pixels == nullptr || width <= 0 || height <= 0) {
-        return env->NewIntArray(0);
+        return NewEmptyIntArray(env);
     }
 
     const jsize pixelCount = env->GetArrayLength(pixels);
     const auto expectedCount = static_cast<int64_t>(width) * static_cast<int64_t>(height);
     if (expectedCount <= 0 || expectedCount > pixelCount) {
-        return env->NewIntArray(0);
-    }
-
-    jintArray output = env->NewIntArray(pixelCount);
-    if (output == nullptr) {
-        return nullptr;
+        return NewEmptyIntArray(env);
     }
 
     jboolean isCopy = JNI_FALSE;
     jint* inputPixels = env->GetIntArrayElements(pixels, &isCopy);
     if (inputPixels == nullptr) {
-        return output;
+        return NewEmptyIntArray(env);
     }
 
-    std::vector<jint> grayPixels(pixelCount);
-    for (jsize index = 0; index < pixelCount; ++index) {
-        // Android Bitmap.Config.ARGB_8888 is packed as 0xAARRGGBB in Kotlin IntArray.
-        // We cast to uint32_t before shifting so signed jint values do not sign-extend.
-        const uint32_t argb = static_cast<uint32_t>(inputPixels[index]);
-        const uint32_t alpha = argb & 0xFF000000u;
-        const uint32_t red = (argb >> 16u) & 0xFFu;
-        const uint32_t green = (argb >> 8u) & 0xFFu;
-        const uint32_t blue = argb & 0xFFu;
-
-        // Rec.601 luminance approximation:
-        // gray = 0.299R + 0.587G + 0.114B.
-        // The integer weights sum to 256, so shifting by 8 replaces a slower division.
-        const uint32_t gray = (77u * red + 150u * green + 29u * blue) >> 8u;
-
-        // Keep the original alpha channel and write the same gray value into R/G/B.
-        grayPixels[index] = static_cast<jint>(
-                alpha | (gray << 16u) | (gray << 8u) | gray
-        );
-    }
+    const auto grayscalePixels = xincamera::filter::ApplyGrayscaleArgb8888(
+            reinterpret_cast<const int32_t*>(inputPixels),
+            static_cast<std::size_t>(expectedCount)
+    );
 
     env->ReleaseIntArrayElements(pixels, inputPixels, JNI_ABORT);
-    env->SetIntArrayRegion(output, 0, pixelCount, grayPixels.data());
+
+    jintArray output = env->NewIntArray(static_cast<jsize>(grayscalePixels.size()));
+    if (output == nullptr) {
+        return nullptr;
+    }
+
+    std::vector<jint> jniPixels(grayscalePixels.begin(), grayscalePixels.end());
+    env->SetIntArrayRegion(
+            output,
+            0,
+            static_cast<jsize>(jniPixels.size()),
+            jniPixels.data()
+    );
     return output;
 }

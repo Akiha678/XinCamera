@@ -1,4 +1,4 @@
-package com.seanchen.xincamera.ui.screen
+package com.seanchen.xincamera.presentation
 
 import android.Manifest
 import android.annotation.SuppressLint
@@ -59,7 +59,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
-import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.StrokeCap
@@ -67,7 +66,6 @@ import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
@@ -76,10 +74,10 @@ import androidx.compose.ui.viewinterop.AndroidView
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import com.seanchen.xincamera.R
-import com.seanchen.xincamera.camera.CameraPreviewController
-import com.seanchen.xincamera.camera.ProfessionalCameraCapabilities
-import com.seanchen.xincamera.camera.ProfessionalCameraSettings
-import com.seanchen.xincamera.camera.WhiteBalancePreset
+import com.seanchen.xincamera.camera.CameraController
+import com.seanchen.xincamera.domain.model.ProfessionalCameraCapabilities
+import com.seanchen.xincamera.domain.model.ProfessionalCameraSettings
+import com.seanchen.xincamera.domain.model.WhiteBalancePreset
 import kotlin.math.exp
 import kotlin.math.ln
 import kotlinx.coroutines.delay
@@ -168,7 +166,7 @@ private fun CameraScreen(
     val context = LocalContext.current
     val lifecycleOwner = LocalLifecycleOwner.current
     val cameraController = remember(context) {
-        CameraPreviewController(context.applicationContext)
+        CameraController(context.applicationContext)
     }
     val previewView = remember(context) {
         PreviewView(context).apply {
@@ -453,6 +451,9 @@ private fun CameraScreen(
     }
 }
 
+/**
+ * 亮度直方图
+ */
 @Composable
 private fun HistogramOverlay(
     histogram: IntArray,
@@ -495,6 +496,9 @@ private fun HistogramOverlay(
     }
 }
 
+/**
+ * 底部控制栏
+ */
 @Composable
 private fun CameraBottomControls(
     isCapturing: Boolean,
@@ -513,38 +517,38 @@ private fun CameraBottomControls(
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
         ) {
-            BottomModeLabel(text = "PHOTO", isActive = true)
+//            BottomModeLabel(text = "PHOTO", isActive = true)
             CaptureButton(
                 isCapturing = isCapturing,
                 onClick = onCapture
             )
-            BottomModeLabel(text = "VIDEO", isActive = false)
+//            BottomModeLabel(text = "VIDEO", isActive = false)
         }
     }
 }
 
-@Composable
-private fun BottomModeLabel(
-    text: String,
-    isActive: Boolean
-) {
-    Box(
-        modifier = Modifier
-            .size(width = 82.dp, height = 58.dp)
-            .clip(RoundedCornerShape(2.dp))
-            .background(if (isActive) Color(0x19181818) else Color.Transparent),
-        contentAlignment = Alignment.Center
-    ) {
-        Text(
-            text = text,
-            color = if (isActive) Color(0xFFF0A49B) else Color(0xBFF0C6BE),
-            fontSize = 13.sp,
-            fontWeight = FontWeight.Bold,
-            letterSpacing = 2.6.sp,
-            textAlign = TextAlign.Center
-        )
-    }
-}
+//@Composable
+//private fun BottomModeLabel(
+//    text: String,
+//    isActive: Boolean
+//) {
+//    Box(
+//        modifier = Modifier
+//            .size(width = 82.dp, height = 58.dp)
+//            .clip(RoundedCornerShape(2.dp))
+//            .background(if (isActive) Color(0x19181818) else Color.Transparent),
+//        contentAlignment = Alignment.Center
+//    ) {
+//        Text(
+//            text = text,
+//            color = if (isActive) Color(0xFFF0A49B) else Color(0xBFF0C6BE),
+//            fontSize = 13.sp,
+//            fontWeight = FontWeight.Bold,
+//            letterSpacing = 2.6.sp,
+//            textAlign = TextAlign.Center
+//        )
+//    }
+//}
 
 @Composable
 private fun FlashGlyph(

@@ -1,4 +1,4 @@
-package com.seanchen.xincamera.camera
+package com.seanchen.xincamera.domain.model
 
 /**
  * 专业模式下的三项核心设置。
