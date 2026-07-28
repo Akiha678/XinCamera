@@ -19,7 +19,6 @@ import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
@@ -118,6 +117,11 @@ fun CameraApp(
     }
 }
 
+/**
+ * 获取权限界面
+ *
+ * 后续放进core/ui
+ */
 @Composable
 private fun PermissionScreen(
     onGrantPermission: () -> Unit
@@ -328,18 +332,17 @@ private fun CameraScreen(
             modifier = Modifier.fillMaxSize()
         )
 
+        // 亮度直方图
         HistogramOverlay(
             histogram = histogramBins,
             modifier = Modifier
                 .align(Alignment.TopEnd)
                 .padding(WindowInsets.systemBars.asPaddingValues())
-                .padding(top = 96.dp, end = 16.dp)
+                .padding(top = 142.dp, end = 16.dp)
         )
 
         CameraHud(
             modifier = Modifier.align(Alignment.TopCenter),
-            zoomRatio = zoomRatio,
-            lensFacing = lensFacing,
             torchEnabled = torchEnabled,
             torchAvailable = torchAvailable,
             showSettingsPanel = showSettingsPanel,
@@ -361,45 +364,6 @@ private fun CameraScreen(
                     "已切换至后置摄像头"
                 } else {
                     "已切换至前置摄像头"
-                }
-            }
-        )
-
-        val exposureTimeNs = ratioToExposureTimeNs(
-            ratio = selectedExposureRatio,
-            minNs = professionalCapabilities.exposureTimeMinNs,
-            maxNs = professionalCapabilities.exposureTimeMaxNs
-        )
-
-        CameraInformation(
-            modifier = Modifier
-                .align(Alignment.TopCenter)
-                .padding(WindowInsets.systemBars.asPaddingValues())
-                .padding(top = 66.dp),
-            lensLabel = if (lensFacing == CameraSelector.LENS_FACING_BACK) "24mm" else "自拍",
-            shutterLabel = formatExposureTimeCompact(exposureTimeNs),
-            apertureLabel = "f1.9",
-            isoLabel = selectedIso.toString(),
-            whiteBalanceLabel = whiteBalanceLabel(context, whiteBalancePreset).let { label ->
-                if (whiteBalancePreset == WhiteBalancePreset.AUTO) "AUTO" else label
-            },
-            tintLabel = "0",
-            activeType = CameraInfoType.Shutter
-        )
-
-        CameraShutterScale(
-            modifier = Modifier
-                .align(Alignment.BottomCenter)
-                .padding(bottom = 122.dp)
-                .padding(WindowInsets.navigationBars.asPaddingValues()),
-            capabilities = professionalCapabilities,
-            exposureRatio = selectedExposureRatio,
-            valueLabel = formatExposureTimeCompact(exposureTimeNs),
-            enabled = professionalCapabilities.supportsManualExposure,
-            onExposureRatioChanged = { ratio ->
-                if (professionalCapabilities.supportsManualExposure) {
-                    manualExposureEnabled = true
-                    selectedExposureRatio = ratio
                 }
             }
         )
@@ -435,7 +399,7 @@ private fun CameraScreen(
         AnimatedVisibility(
             modifier = Modifier
                 .align(Alignment.BottomCenter)
-                .padding(start = 16.dp, end = 16.dp, bottom = 142.dp),
+                .padding(start = 16.dp, end = 16.dp, bottom = 148.dp),
             visible = showSettingsPanel,
             enter = slideInVertically(initialOffsetY = { it / 2 }) + fadeIn(),
             exit = slideOutVertically(targetOffsetY = { it / 2 }) + fadeOut()
@@ -495,9 +459,9 @@ private fun HistogramOverlay(
 ) {
     Surface(
         modifier = modifier.size(width = 180.dp, height = 104.dp),
-        shape = RoundedCornerShape(8.dp),
-        color = Color(0xB311161C),
-        border = BorderStroke(1.dp, Color(0x66FFFFFF))
+        shape = RoundedCornerShape(20.dp),
+        color = Color(0x6611161C),
+        border = BorderStroke(1.dp, Color(0x24FFFFFF))
     ) {
         Column(
             modifier = Modifier.padding(10.dp),
@@ -529,7 +493,6 @@ private fun HistogramOverlay(
         }
     }
 }
-
 /**
  * 底部控制栏
  */
@@ -538,17 +501,38 @@ private fun CameraBottomControls(
     isCapturing: Boolean,
     onCapture: () -> Unit
 ) {
-    Box(
+    Row(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(bottom = 12.dp),
-        contentAlignment = Alignment.Center
+            .padding(horizontal = 34.dp, vertical = 12.dp),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically
     ) {
+        CameraModeLabel(text = "PHOTO", isActive = true)
         CaptureButton(
             isCapturing = isCapturing,
             onClick = onCapture
         )
+        CameraModeLabel(text = "VIDEO", isActive = false)
     }
+}
+
+@Composable
+private fun CameraModeLabel(
+    text: String,
+    isActive: Boolean
+) {
+    Text(
+        text = text,
+        modifier = Modifier
+            .clip(RoundedCornerShape(50))
+            .background(if (isActive) Color(0x22FFFFFF) else Color.Transparent)
+            .padding(horizontal = 12.dp, vertical = 7.dp),
+        color = if (isActive) Color.White else Color(0x88FFFFFF),
+        fontSize = 12.sp,
+        fontWeight = FontWeight.Black,
+        maxLines = 1
+    )
 }
 
 @Composable
@@ -631,14 +615,48 @@ private fun CaptureRingGlyph(
         }
     }
 }
+
+@Composable
+private fun SwitchCameraGlyph() {
+    Canvas(modifier = Modifier.size(26.dp)) {
+        val stroke = Stroke(width = 2.2.dp.toPx(), cap = StrokeCap.Round)
+        drawArc(
+            color = Color.White,
+            startAngle = 35f,
+            sweepAngle = 230f,
+            useCenter = false,
+            topLeft = Offset(size.width * 0.18f, size.height * 0.18f),
+            size = androidx.compose.ui.geometry.Size(size.width * 0.64f, size.height * 0.64f),
+            style = stroke
+        )
+        drawArc(
+            color = Color.White,
+            startAngle = 215f,
+            sweepAngle = 230f,
+            useCenter = false,
+            topLeft = Offset(size.width * 0.18f, size.height * 0.18f),
+            size = androidx.compose.ui.geometry.Size(size.width * 0.64f, size.height * 0.64f),
+            style = stroke
+        )
+        drawCircle(
+            color = Color.White,
+            radius = 2.8.dp.toPx(),
+            center = Offset(size.width * 0.78f, size.height * 0.34f)
+        )
+        drawCircle(
+            color = Color.White,
+            radius = 2.8.dp.toPx(),
+            center = Offset(size.width * 0.22f, size.height * 0.66f)
+        )
+    }
+}
+
 /**
  * 顶部Bar
  */
 @Composable
 private fun CameraHud(
     modifier: Modifier = Modifier,
-    zoomRatio: Float,
-    lensFacing: Int,
     torchEnabled: Boolean,
     torchAvailable: Boolean,
     showSettingsPanel: Boolean,
@@ -646,47 +664,35 @@ private fun CameraHud(
     onToggleTorch: () -> Unit,
     onSwitchLens: () -> Unit
 ) {
-    Column(
-        modifier = modifier,
-        verticalArrangement = Arrangement.spacedBy(10.dp)
-    ) {
+    Column(modifier = modifier) {
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .height(52.dp)
-                .padding(horizontal = 18.dp),
+                .padding(WindowInsets.systemBars.asPaddingValues())
+                .padding(horizontal = 14.dp, vertical = 10.dp)
+                .height(52.dp),
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
         ) {
+            // 设置按钮
             SettingPill(
                 isActive = showSettingsPanel,
                 onClick = onToggleSettings
             )
 
-            FlashTopButton(
-                isActive = torchEnabled,
-                isEnabled = torchAvailable,
-                onClick = onToggleTorch
-            )
-        }
-        // 变焦
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 28.dp),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.Top
-        ) {
-            Text(
-                text = String.format("%.1fx", zoomRatio),
-                modifier = Modifier
-                    .clip(RoundedCornerShape(2.dp))
-                    .background(Color(0x7A0A0A0A))
-                    .padding(horizontal = 10.dp, vertical = 5.dp),
-                color = Color(0xBFF0C6BE),
-                fontSize = 14.sp,
-                fontWeight = FontWeight.Bold
-            )
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(10.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                // 闪光灯按钮
+                FlashTopButton(
+                    isActive = torchEnabled,
+                    isEnabled = torchAvailable,
+                    onClick = onToggleTorch
+                )
+                // 切换摄像头
+                SwitchLensButton(onClick = onSwitchLens)
+            }
         }
     }
 }
@@ -720,11 +726,24 @@ private fun SettingPill(
         size = 52.dp,
         isActive = isActive,
         shape = RoundedCornerShape(50),
-        activeBackgroundColor = Color(0xFFFFB04C),
-        inactiveBackgroundColor = Color(0x9911161C),
+        activeBackgroundColor = Color(0xFFFFD39A),
+        inactiveBackgroundColor = Color(0x6611161C),
         onClick = onClick
     ) {
         SettingsGlyph(isActive = isActive)
+    }
+}
+
+@Composable
+private fun SwitchLensButton(
+    onClick: () -> Unit
+) {
+    CameraIconButton(
+        size = 42.dp,
+        inactiveBackgroundColor = Color(0x6611161C),
+        onClick = onClick
+    ) {
+        SwitchCameraGlyph()
     }
 }
 
@@ -736,10 +755,10 @@ private fun CaptureButton(
 ) {
     CameraIconButton(
         modifier = Modifier.padding(horizontal = 14.dp),
-        size = 92.dp,
+        size = 88.dp,
         enabled = !isCapturing,
-        inactiveBackgroundColor = Color(0x3311161C),
-        disabledBackgroundColor = Color(0x3311161C),
+        inactiveBackgroundColor = Color(0x33FFFFFF),
+        disabledBackgroundColor = Color(0x33FFFFFF),
         onClick = onClick
     ) {
         CaptureRingGlyph(isCapturing = isCapturing)
@@ -771,13 +790,14 @@ private fun ProfessionalSettingsPanel(
         modifier = Modifier
             .fillMaxWidth()
             .requiredHeightIn(min = 320.dp),
-        shape = RoundedCornerShape(12.dp),
-        color = Color(0xF011161C)
+        shape = RoundedCornerShape(28.dp),
+        color = Color(0xE611161C),
+        border = BorderStroke(1.dp, Color(0x22FFFFFF))
     ) {
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(18.dp),
+                .padding(20.dp),
             verticalArrangement = Arrangement.spacedBy(14.dp)
         ) {
             Row(
@@ -931,6 +951,7 @@ private fun ratioToExposureTimeNs(
     return exp(minLog + (maxLog - minLog) * clampedRatio).toLong()
 }
 
+@SuppressLint("DefaultLocale")
 private fun formatExposureTime(
     exposureTimeNs: Long
 ): String {
@@ -941,14 +962,6 @@ private fun formatExposureTime(
         val reciprocal = (1.0 / seconds).toInt().coerceAtLeast(1)
         "1/$reciprocal s"
     }
-}
-
-private fun formatExposureTimeCompact(
-    exposureTimeNs: Long
-): String {
-    return formatExposureTime(exposureTimeNs)
-        .removeSuffix(" s")
-        .removeSuffix("s")
 }
 
 private fun whiteBalanceLabel(

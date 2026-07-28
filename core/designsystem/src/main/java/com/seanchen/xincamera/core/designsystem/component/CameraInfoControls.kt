@@ -4,8 +4,8 @@ import android.graphics.Paint
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.detectHorizontalDragGestures
-import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -19,6 +19,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.StrokeCap
@@ -52,8 +53,9 @@ fun CameraInfoBar(
     Row(
         modifier = modifier
             .fillMaxWidth()
-            .background(Color(0xF20A0F17))
-            .padding(horizontal = 12.dp, vertical = 10.dp),
+            .clip(RoundedCornerShape(22.dp))
+            .background(Color(0x6611161C))
+            .padding(horizontal = 10.dp, vertical = 8.dp),
         horizontalArrangement = Arrangement.SpaceBetween,
         verticalAlignment = Alignment.CenterVertically
     ) {
@@ -72,18 +74,18 @@ private fun CameraInfoTile(
     modifier: Modifier = Modifier
 ) {
     val foreground = when {
-        item.isActive -> Color.White
+        item.isActive -> Color(0xFFFFD39A)
         item.isMuted -> Color(0x88FFFFFF)
         else -> Color(0xFFEFF3F8)
     }
-    val labelColor = if (item.isActive) Color.White else Color(0xCCFFFFFF)
+    val labelColor = if (item.isActive) Color(0xFFFFD39A) else Color(0xB3FFFFFF)
     Box(
         modifier = modifier
-            .height(58.dp)
-            .padding(horizontal = 3.dp)
+            .height(54.dp)
+            .padding(horizontal = 2.dp)
             .background(
-                color = if (item.isActive) Color(0xFF339AF0) else Color.Transparent,
-                shape = RoundedCornerShape(6.dp)
+                color = if (item.isActive) Color(0x22FFD39A) else Color.Transparent,
+                shape = RoundedCornerShape(16.dp)
             )
             .padding(horizontal = 7.dp, vertical = 6.dp)
     ) {
