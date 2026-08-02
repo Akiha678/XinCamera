@@ -19,3 +19,11 @@
 # If you keep the line number information, uncomment this to
 # hide the original source file name.
 #-renamesourcefileattribute SourceFile
+
+# JNI 导出符号包含完整类名和方法名，Release 混淆时必须保持桥接声明不变。
+-keep class com.seanchen.xincamera.nativebridge.NativeMethods {
+    native <methods>;
+}
+
+# Release 包不保留源码文件名和行号，进一步缩小体积。
+-renamesourcefileattribute SourceFile

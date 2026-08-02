@@ -1,9 +1,11 @@
 package com.seanchen.xincamera.camera
 
 import android.graphics.Bitmap
+import android.graphics.ImageFormat
 import android.net.Uri
 import androidx.camera.core.ImageCapture
 import androidx.camera.core.ImageCaptureException
+import com.seanchen.xincamera.domain.model.PhotoCaptureResult
 import com.seanchen.xincamera.nativebridge.NativeBridge
 import com.seanchen.xincamera.storage.MediaStoreManager
 import java.util.concurrent.Executor
@@ -21,7 +23,8 @@ class CameraCaptureManager(
 ) {
     fun capturePhoto(
         imageCapture: ImageCapture?,
-        onSaved: (String) -> Unit,
+        captureOutputFormat: Int,
+        onSaved: (PhotoCaptureResult) -> Unit,
         onError: (String) -> Unit
     ) {
         val captureUseCase = imageCapture ?: run {
@@ -29,6 +32,20 @@ class CameraCaptureManager(
             return
         }
 
+        when (captureOutputFormat) {
+            ImageCapture.OUTPUT_FORMAT_RAW_JPEG ->
+                captureRawAndJpeg(captureUseCase, onSaved, onError)
+            ImageCapture.OUTPUT_FORMAT_RAW ->
+                captureRawOnly(captureUseCase, onSaved, onError)
+            else -> captureJpeg(captureUseCase, onSaved, onError)
+        }
+    }
+
+    private fun captureJpeg(
+        captureUseCase: ImageCapture,
+        onSaved: (PhotoCaptureResult) -> Unit,
+        onError: (String) -> Unit
+    ) {
         captureUseCase.takePicture(
             mediaStoreManager.createPhotoOutputOptions(),
             mainExecutor,
@@ -38,7 +55,7 @@ class CameraCaptureManager(
                     if (uri != null) {
                         mediaStoreManager.finalizePendingImage(uri)
                     }
-                    onSaved(uri?.toString() ?: "saved")
+                    onSaved(PhotoCaptureResult(jpegUri = uri?.toString()))
                 }
 
                 override fun onError(exception: ImageCaptureException) {
@@ -46,6 +63,151 @@ class CameraCaptureManager(
                 }
             }
         )
+    }
+
+    private fun captureRawAndJpeg(
+        captureUseCase: ImageCapture,
+        onSaved: (PhotoCaptureResult) -> Unit,
+        onError: (String) -> Unit
+    ) {
+        val rawTempFile = mediaStoreManager.createRawTempFile()
+        var jpegUri: String? = null
+        var rawUri: String? = null
+        var rawSizeBytes: Long? = null
+        var rawFingerprint: String? = null
+        var jpegFinished = false
+        var rawFinished = false
+        var terminalCallbackSent = false
+
+        fun finishIfComplete() {
+            if (!terminalCallbackSent && jpegFinished && rawFinished) {
+                terminalCallbackSent = true
+                onSaved(
+                    PhotoCaptureResult(
+                        jpegUri = jpegUri,
+                        rawUri = rawUri,
+                        rawSizeBytes = rawSizeBytes,
+                        rawFingerprint = rawFingerprint
+                    )
+                )
+            }
+        }
+
+        fun fail(message: String) {
+            if (!terminalCallbackSent) {
+                terminalCallbackSent = true
+                rawTempFile.delete()
+                onError(message)
+            }
+        }
+
+        try {
+            captureUseCase.takePicture(
+                mediaStoreManager.createRawOutputOptions(rawTempFile),
+                mediaStoreManager.createPhotoOutputOptions(),
+                mainExecutor,
+                object : ImageCapture.OnImageSavedCallback {
+                    override fun onImageSaved(
+                        outputFileResults: ImageCapture.OutputFileResults
+                    ) {
+                        val savedUri = outputFileResults.savedUri
+                        val isRaw = outputFileResults.imageFormat == ImageFormat.RAW_SENSOR
+                        if (!isRaw) {
+                            if (savedUri == null) {
+                                fail("JPEG 文件保存失败")
+                                return
+                            }
+                            mediaStoreManager.finalizePendingImage(savedUri)
+                            jpegUri = savedUri.toString()
+                            jpegFinished = true
+                            finishIfComplete()
+                            return
+                        }
+
+                        imageProcessingExecutor.execute {
+                            try {
+                                val summary = NativeBridge.inspectRawDng(rawTempFile.absolutePath)
+                                if (!summary.isValid) {
+                                    throw IllegalStateException("JNI 检测到无效的 DNG 文件")
+                                }
+                                val importedRawUri = mediaStoreManager.saveDngFile(rawTempFile)
+                                mainExecutor.execute {
+                                    rawUri = importedRawUri.toString()
+                                    rawSizeBytes = summary.sizeBytes
+                                    rawFingerprint = summary.fingerprint
+                                    rawFinished = true
+                                    finishIfComplete()
+                                }
+                            } catch (error: Exception) {
+                                mainExecutor.execute {
+                                    fail(error.message ?: "RAW 文件处理失败")
+                                }
+                            } finally {
+                                rawTempFile.delete()
+                            }
+                        }
+                    }
+
+                    override fun onError(exception: ImageCaptureException) {
+                        fail(exception.message ?: "RAW 拍摄失败")
+                    }
+                }
+            )
+        } catch (error: Exception) {
+            fail(error.message ?: "当前相机无法启动 RAW 拍摄")
+        }
+    }
+
+    private fun captureRawOnly(
+        captureUseCase: ImageCapture,
+        onSaved: (PhotoCaptureResult) -> Unit,
+        onError: (String) -> Unit
+    ) {
+        val rawTempFile = mediaStoreManager.createRawTempFile()
+        try {
+            captureUseCase.takePicture(
+                mediaStoreManager.createRawOutputOptions(rawTempFile),
+                mainExecutor,
+                object : ImageCapture.OnImageSavedCallback {
+                    override fun onImageSaved(
+                        outputFileResults: ImageCapture.OutputFileResults
+                    ) {
+                        imageProcessingExecutor.execute {
+                            try {
+                                val summary = NativeBridge.inspectRawDng(rawTempFile.absolutePath)
+                                if (!summary.isValid) {
+                                    throw IllegalStateException("JNI 检测到无效的 DNG 文件")
+                                }
+                                val rawUri = mediaStoreManager.saveDngFile(rawTempFile)
+                                mainExecutor.execute {
+                                    onSaved(
+                                        PhotoCaptureResult(
+                                            rawUri = rawUri.toString(),
+                                            rawSizeBytes = summary.sizeBytes,
+                                            rawFingerprint = summary.fingerprint
+                                        )
+                                    )
+                                }
+                            } catch (error: Exception) {
+                                mainExecutor.execute {
+                                    onError(error.message ?: "RAW 文件处理失败")
+                                }
+                            } finally {
+                                rawTempFile.delete()
+                            }
+                        }
+                    }
+
+                    override fun onError(exception: ImageCaptureException) {
+                        rawTempFile.delete()
+                        onError(exception.message ?: "RAW 拍摄失败")
+                    }
+                }
+            )
+        } catch (error: Exception) {
+            rawTempFile.delete()
+            onError(error.message ?: "当前相机无法启动 RAW 拍摄")
+        }
     }
 
     fun saveGrayscaleCopy(

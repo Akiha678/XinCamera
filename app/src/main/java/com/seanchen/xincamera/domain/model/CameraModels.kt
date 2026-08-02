@@ -27,6 +27,25 @@ data class ProfessionalCameraCapabilities(
 )
 
 /**
+ * 一次拍摄产生的媒体文件。
+ *
+ * 普通模式只有 [jpegUri]；RAW 模式同时包含 JPEG 和经过 native 校验的 DNG。
+ */
+data class PhotoCaptureResult(
+    val jpegUri: String? = null,
+    val rawUri: String? = null,
+    val rawSizeBytes: Long? = null,
+    val rawFingerprint: String? = null
+)
+
+/** JNI 对 CameraX 生成的 DNG 文件进行结构校验后的摘要。 */
+data class RawDngSummary(
+    val isValid: Boolean,
+    val sizeBytes: Long,
+    val fingerprint: String
+)
+
+/**
  * 白平衡预设。
  *
  * 当前版本先走 Camera2 的 AWB 预设，稳定性更高；

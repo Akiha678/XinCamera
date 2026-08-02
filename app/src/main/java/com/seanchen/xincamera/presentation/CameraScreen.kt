@@ -80,6 +80,7 @@ import kotlin.math.abs
 import kotlin.math.roundToInt
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import java.util.Locale
 
 @Composable
 fun CameraApp(
@@ -160,6 +161,8 @@ private fun CameraScreen(
     var maxZoomRatio by rememberSaveable { mutableFloatStateOf(1f) }
     var torchEnabled by rememberSaveable { mutableStateOf(false) }
     var torchAvailable by rememberSaveable { mutableStateOf(false) }
+    var rawCaptureEnabled by rememberSaveable { mutableStateOf(false) }
+    var rawCaptureAvailable by rememberSaveable { mutableStateOf(false) }
     var statusMessage by rememberSaveable { mutableStateOf("") }
     var focusPoint by remember { mutableStateOf<Offset?>(null) }
     var selectedExposureControl by rememberSaveable {
@@ -225,11 +228,12 @@ private fun CameraScreen(
         }
     }
 
-    DisposableEffect(lifecycleOwner, lensFacing) {
+    DisposableEffect(lifecycleOwner, lensFacing, rawCaptureEnabled) {
         cameraController.bindToLifecycle(
             lifecycleOwner = lifecycleOwner,
             previewView = previewView,
             lensFacing = lensFacing,
+            rawCaptureRequested = rawCaptureEnabled,
             onZoomChanged = { currentZoomRatio, minZoom, maxZoom ->
                 zoomRatio = currentZoomRatio
                 minZoomRatio = minZoom
@@ -255,6 +259,10 @@ private fun CameraScreen(
                     manualExposureEnabled = false
                     selectedExposureControl = null
                 }
+            },
+            onRawAvailabilityChanged = { available ->
+                rawCaptureAvailable = available
+                if (!available) rawCaptureEnabled = false
             },
             onHistogramChanged = { histogram ->
                 histogramBins = histogram
@@ -320,6 +328,8 @@ private fun CameraScreen(
             modifier = Modifier.align(Alignment.TopCenter),
             torchEnabled = torchEnabled,
             torchAvailable = torchAvailable,
+            rawCaptureEnabled = rawCaptureEnabled,
+            rawCaptureAvailable = rawCaptureAvailable,
             showSettingsPanel = false,
             onToggleSettings = onOpenSettings,
             onToggleTorch = {
@@ -327,6 +337,18 @@ private fun CameraScreen(
                     cameraController.setTorchEnabled(!torchEnabled)
                 } else {
                     statusMessage = "无闪光灯"
+                }
+            },
+            onToggleRaw = {
+                if (rawCaptureAvailable) {
+                    rawCaptureEnabled = !rawCaptureEnabled
+                    statusMessage = if (rawCaptureEnabled) {
+                        "RAW 已开启"
+                    } else {
+                        "JPEG"
+                    }
+                } else {
+                    statusMessage = "当前镜头不支持 RAW"
                 }
             },
             onSwitchLens = {
@@ -389,12 +411,25 @@ private fun CameraScreen(
                         isCapturing = true
                         statusMessage = "正在拍摄"
                         cameraController.capturePhoto(
-                            onSaved = { outputPath ->
+                            onSaved = { result ->
                                 isCapturing = false
-                                lastCapturedUri = outputPath.takeIf {
-                                    it.startsWith("content://")
+                                lastCapturedUri = result.jpegUri ?: result.rawUri
+                                statusMessage = if (result.rawUri != null) {
+                                    val sizeMb = (result.rawSizeBytes ?: 0L) /
+                                        (1024.0 * 1024.0)
+                                    val outputLabel = if (result.jpegUri != null) {
+                                        "RAW + JPEG"
+                                    } else {
+                                        "RAW"
+                                    }
+                                    String.format(
+                                        Locale.US,
+                                        "$outputLabel 已保存 · %.1f MB",
+                                        sizeMb
+                                    )
+                                } else {
+                                    ""
                                 }
-                                statusMessage = ""
                             },
                             onError = { error ->
                                 isCapturing = false
@@ -625,9 +660,12 @@ private fun CameraHud(
     modifier: Modifier = Modifier,
     torchEnabled: Boolean,
     torchAvailable: Boolean,
+    rawCaptureEnabled: Boolean,
+    rawCaptureAvailable: Boolean,
     showSettingsPanel: Boolean,
     onToggleSettings: () -> Unit,
     onToggleTorch: () -> Unit,
+    onToggleRaw: () -> Unit,
     onSwitchLens: () -> Unit
 ) {
     Column(modifier = modifier) {
@@ -650,6 +688,11 @@ private fun CameraHud(
                 horizontalArrangement = Arrangement.spacedBy(10.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
+                RawTopButton(
+                    isActive = rawCaptureEnabled,
+                    isEnabled = rawCaptureAvailable,
+                    onClick = onToggleRaw
+                )
                 // 闪光灯按钮
                 FlashTopButton(
                     isActive = torchEnabled,
@@ -660,6 +703,35 @@ private fun CameraHud(
                 SwitchLensButton(onClick = onSwitchLens)
             }
         }
+    }
+}
+
+@Composable
+private fun RawTopButton(
+    isActive: Boolean,
+    isEnabled: Boolean,
+    onClick: () -> Unit
+) {
+    CameraIconButton(
+        size = 42.dp,
+        enabled = isEnabled,
+        isActive = isActive,
+        shape = RoundedCornerShape(12.dp),
+        activeBackgroundColor = Color(0xFFFFD39A),
+        inactiveBackgroundColor = Color(0x6611161C),
+        disabledBackgroundColor = Color(0x3311161C),
+        onClick = onClick
+    ) {
+        Text(
+            text = "RAW",
+            color = when {
+                !isEnabled -> Color(0x55FFFFFF)
+                isActive -> Color(0xFF11161C)
+                else -> Color.White
+            },
+            fontSize = 10.sp,
+            fontWeight = FontWeight.Black
+        )
     }
 }
 

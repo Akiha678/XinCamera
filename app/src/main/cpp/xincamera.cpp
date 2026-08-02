@@ -4,6 +4,7 @@
 
 #include "filter/grayscale_filter.h"
 #include "histogram/luma_histogram.h"
+#include "raw/dng_inspector.h"
 
 namespace {
 
@@ -132,4 +133,37 @@ Java_com_seanchen_xincamera_nativebridge_NativeMethods_applyGrayscaleArgb8888(
             jniPixels.data()
     );
     return output;
+}
+
+/**
+ * 在 native 层读取 CameraX 生成的 DNG，验证 TIFF/DNG 结构并生成稳定文件指纹。
+ * 返回值依次为：是否有效、文件字节数、FNV-1a 64 位指纹。
+ */
+extern "C"
+JNIEXPORT jlongArray JNICALL
+Java_com_seanchen_xincamera_nativebridge_NativeMethods_inspectRawDng(
+        JNIEnv* env,
+        jobject /* this */,
+        jstring filePath) {
+    if (filePath == nullptr) {
+        return env->NewLongArray(0);
+    }
+
+    const char* path_chars = env->GetStringUTFChars(filePath, nullptr);
+    if (path_chars == nullptr) {
+        return env->NewLongArray(0);
+    }
+    const auto summary = xincamera::raw::InspectDngFile(path_chars);
+    env->ReleaseStringUTFChars(filePath, path_chars);
+
+    const jlong values[] = {
+            summary.is_valid ? 1L : 0L,
+            static_cast<jlong>(summary.size_bytes),
+            static_cast<jlong>(summary.fingerprint),
+    };
+    jlongArray result = env->NewLongArray(3);
+    if (result != nullptr) {
+        env->SetLongArrayRegion(result, 0, 3, values);
+    }
+    return result;
 }

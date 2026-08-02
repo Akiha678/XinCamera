@@ -5,6 +5,7 @@ project("xincamera")
 add_library(${CMAKE_PROJECT_NAME} SHARED
     filter/grayscale_filter.cpp
     histogram/luma_histogram.cpp
+    raw/dng_inspector.cpp
     xincamera.cpp
 )
 

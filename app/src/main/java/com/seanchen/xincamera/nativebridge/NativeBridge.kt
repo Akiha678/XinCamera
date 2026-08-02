@@ -1,5 +1,7 @@
 package com.seanchen.xincamera.nativebridge
 
+import com.seanchen.xincamera.domain.model.RawDngSummary
+
 /**
  * Native 能力对 Kotlin 业务层暴露的稳定入口。
  *
@@ -56,5 +58,22 @@ object NativeBridge {
         )
     }
 
+    /**
+     * 由 C++ 校验 DNGVersion 标签并计算整个 RAW 文件的 FNV-1a 指纹。
+     * 校验失败时调用方必须删除临时文件，避免把损坏的 RAW 导入相册。
+     */
+    fun inspectRawDng(filePath: String): RawDngSummary {
+        val values = NativeMethods.inspectRawDng(filePath)
+        if (values.size != RAW_SUMMARY_VALUE_COUNT) {
+            return RawDngSummary(isValid = false, sizeBytes = 0L, fingerprint = "")
+        }
+        return RawDngSummary(
+            isValid = values[0] == 1L,
+            sizeBytes = values[1],
+            fingerprint = java.lang.Long.toUnsignedString(values[2], 16).padStart(16, '0')
+        )
+    }
+
     private const val HISTOGRAM_BUCKET_COUNT = 256
+    private const val RAW_SUMMARY_VALUE_COUNT = 3
 }

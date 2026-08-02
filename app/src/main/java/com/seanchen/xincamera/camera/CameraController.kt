@@ -14,6 +14,7 @@ import androidx.lifecycle.LifecycleOwner
 import androidx.lifecycle.Observer
 import com.seanchen.xincamera.domain.model.ProfessionalCameraCapabilities
 import com.seanchen.xincamera.domain.model.ProfessionalCameraSettings
+import com.seanchen.xincamera.domain.model.PhotoCaptureResult
 import com.seanchen.xincamera.storage.MediaStoreManager
 import java.util.concurrent.ExecutorService
 import java.util.concurrent.Executors
@@ -42,6 +43,7 @@ class CameraController(
     private var camera: Camera? = null
     private var imageCapture: ImageCapture? = null
     private var imageAnalysis: ImageAnalysis? = null
+    private var captureOutputFormat: Int = ImageCapture.OUTPUT_FORMAT_JPEG
     private var previewView: PreviewView? = null
     private var zoomObserver: Observer<ZoomState>? = null
     private var torchObserver: Observer<Int>? = null
@@ -50,10 +52,12 @@ class CameraController(
         lifecycleOwner: LifecycleOwner,
         previewView: PreviewView,
         lensFacing: Int,
+        rawCaptureRequested: Boolean,
         onZoomChanged: (zoomRatio: Float, minZoomRatio: Float, maxZoomRatio: Float) -> Unit,
         onTorchAvailabilityChanged: (Boolean) -> Unit,
         onTorchStateChanged: (Boolean) -> Unit,
         onProfessionalCapabilitiesChanged: (ProfessionalCameraCapabilities) -> Unit,
+        onRawAvailabilityChanged: (Boolean) -> Unit,
         onHistogramChanged: (IntArray) -> Unit,
         onError: (String) -> Unit
     ) {
@@ -64,18 +68,25 @@ class CameraController(
                 val provider = providerFuture.get()
                 clearObservers()
 
-                val analyzer = Analyzer(
-                    mainExecutor = mainExecutor,
-                    onHistogramChanged = onHistogramChanged,
-                    onError = onError
-                )
-                val useCases = useCaseManager.createUseCases(
-                    previewView = previewView,
-                    analysisExecutor = analysisExecutor,
-                    analyzer = analyzer
-                )
-
                 try {
+                    val rawOutputFormat = useCaseManager.preferredRawOutputFormat(provider, lensFacing)
+                    val requestedOutputFormat = if (rawCaptureRequested) {
+                        rawOutputFormat ?: ImageCapture.OUTPUT_FORMAT_JPEG
+                    } else {
+                        ImageCapture.OUTPUT_FORMAT_JPEG
+                    }
+                    onRawAvailabilityChanged(rawOutputFormat != null)
+                    val analyzer = Analyzer(
+                        mainExecutor = mainExecutor,
+                        onHistogramChanged = onHistogramChanged,
+                        onError = onError
+                    )
+                    val useCases = useCaseManager.createUseCases(
+                        previewView = previewView,
+                        analysisExecutor = analysisExecutor,
+                        analyzer = analyzer,
+                        captureOutputFormat = requestedOutputFormat
+                    )
                     val boundCamera = useCaseManager.bindToLifecycle(
                         provider = provider,
                         lifecycleOwner = lifecycleOwner,
@@ -85,6 +96,10 @@ class CameraController(
                     camera = boundCamera
                     imageCapture = useCases.imageCapture
                     imageAnalysis = useCases.imageAnalysis
+                    captureOutputFormat = requestedOutputFormat
+                    if (useCases.imageAnalysis == null) {
+                        onHistogramChanged(IntArray(256))
+                    }
 
                     val hasFlashUnit = boundCamera.cameraInfo.hasFlashUnit()
                     onTorchAvailabilityChanged(hasFlashUnit)
@@ -116,6 +131,7 @@ class CameraController(
                     camera = null
                     imageCapture = null
                     imageAnalysis = null
+                    captureOutputFormat = ImageCapture.OUTPUT_FORMAT_JPEG
                     onError(error.message ?: "Camera binding failed")
                 }
             },
@@ -128,11 +144,12 @@ class CameraController(
     }
 
     fun capturePhoto(
-        onSaved: (String) -> Unit,
+        onSaved: (PhotoCaptureResult) -> Unit,
         onError: (String) -> Unit
     ) {
         captureManager.capturePhoto(
             imageCapture = imageCapture,
+            captureOutputFormat = captureOutputFormat,
             onSaved = onSaved,
             onError = onError
         )
@@ -195,6 +212,7 @@ class CameraController(
                 camera = null
                 imageCapture = null
                 imageAnalysis = null
+                captureOutputFormat = ImageCapture.OUTPUT_FORMAT_JPEG
             },
             mainExecutor
         )

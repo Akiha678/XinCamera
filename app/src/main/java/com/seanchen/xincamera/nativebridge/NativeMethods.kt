@@ -26,4 +26,6 @@ internal object NativeMethods {
         width: Int,
         height: Int
     ): IntArray
+
+    external fun inspectRawDng(filePath: String): LongArray
 }

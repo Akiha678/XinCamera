@@ -19,26 +19,54 @@ class CameraUseCaseManager {
     fun createUseCases(
         previewView: PreviewView,
         analysisExecutor: ExecutorService,
-        analyzer: Analyzer
+        analyzer: Analyzer,
+        captureOutputFormat: Int
     ): CameraUseCases {
         val preview = Preview.Builder().build().also { useCase ->
             useCase.surfaceProvider = previewView.surfaceProvider
         }
         val imageCapture = ImageCapture.Builder()
-            .setCaptureMode(ImageCapture.CAPTURE_MODE_MINIMIZE_LATENCY)
+            .setCaptureMode(
+                if (captureOutputFormat != ImageCapture.OUTPUT_FORMAT_JPEG) {
+                    ImageCapture.CAPTURE_MODE_MAXIMIZE_QUALITY
+                } else {
+                    ImageCapture.CAPTURE_MODE_MINIMIZE_LATENCY
+                }
+            )
+            .setOutputFormat(captureOutputFormat)
             .build()
-        val imageAnalysis = ImageAnalysis.Builder()
-            .setBackpressureStrategy(ImageAnalysis.STRATEGY_KEEP_ONLY_LATEST)
-            .build()
-            .also { useCase ->
-                useCase.setAnalyzer(analysisExecutor, analyzer)
-            }
+        // RAW + JPEG 同拍已经占用两个高分辨率输出流。部分 RAW 设备无法再同时承载
+        // YUV 分析流，因此该模式暂停直方图，避免整个相机会话绑定失败。
+        val imageAnalysis = if (captureOutputFormat == ImageCapture.OUTPUT_FORMAT_RAW_JPEG) {
+            null
+        } else {
+            ImageAnalysis.Builder()
+                .setBackpressureStrategy(ImageAnalysis.STRATEGY_KEEP_ONLY_LATEST)
+                .build()
+                .also { useCase -> useCase.setAnalyzer(analysisExecutor, analyzer) }
+        }
 
         return CameraUseCases(
             preview = preview,
             imageCapture = imageCapture,
             imageAnalysis = imageAnalysis
         )
+    }
+
+    fun preferredRawOutputFormat(
+        provider: ProcessCameraProvider,
+        lensFacing: Int
+    ): Int? {
+        val capabilities = ImageCapture.getImageCaptureCapabilities(
+            provider.getCameraInfo(cameraSelector(lensFacing))
+        )
+        return when {
+            capabilities.supportedOutputFormats.contains(ImageCapture.OUTPUT_FORMAT_RAW_JPEG) ->
+                ImageCapture.OUTPUT_FORMAT_RAW_JPEG
+            capabilities.supportedOutputFormats.contains(ImageCapture.OUTPUT_FORMAT_RAW) ->
+                ImageCapture.OUTPUT_FORMAT_RAW
+            else -> null
+        }
     }
 
     fun bindToLifecycle(
@@ -48,20 +76,26 @@ class CameraUseCaseManager {
         useCases: CameraUseCases
     ): Camera {
         provider.unbindAll()
+        val boundUseCases = buildList {
+            add(useCases.preview)
+            add(useCases.imageCapture)
+            useCases.imageAnalysis?.let(::add)
+        }
         return provider.bindToLifecycle(
             lifecycleOwner,
-            CameraSelector.Builder()
-                .requireLensFacing(lensFacing)
-                .build(),
-            useCases.preview,
-            useCases.imageCapture,
-            useCases.imageAnalysis
+            cameraSelector(lensFacing),
+            *boundUseCases.toTypedArray()
         )
     }
+
+    private fun cameraSelector(lensFacing: Int): CameraSelector =
+        CameraSelector.Builder()
+            .requireLensFacing(lensFacing)
+            .build()
 }
 
 data class CameraUseCases(
     val preview: Preview,
     val imageCapture: ImageCapture,
-    val imageAnalysis: ImageAnalysis
+    val imageAnalysis: ImageAnalysis?
 )

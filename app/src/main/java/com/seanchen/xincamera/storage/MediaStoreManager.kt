@@ -9,6 +9,7 @@ import android.os.Build
 import android.os.Environment
 import android.provider.MediaStore
 import androidx.camera.core.ImageCapture
+import java.io.File
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -28,6 +29,30 @@ class MediaStoreManager(
             MediaStore.Images.Media.EXTERNAL_CONTENT_URI,
             createImageContentValues(prefix = "xin", mimeType = "image/jpeg")
         ).build()
+    }
+
+    fun createRawTempFile(): File = File.createTempFile("xin_raw_", ".dng", context.cacheDir)
+
+    fun createRawOutputOptions(file: File): ImageCapture.OutputFileOptions =
+        ImageCapture.OutputFileOptions.Builder(file).build()
+
+    /** 将 native 校验后的 DNG 从私有临时目录导入系统图片库。 */
+    fun saveDngFile(sourceFile: File): Uri {
+        val uri = context.contentResolver.insert(
+            MediaStore.Images.Media.EXTERNAL_CONTENT_URI,
+            createImageContentValues(prefix = "xin_raw", mimeType = DNG_MIME_TYPE)
+        ) ?: throw IllegalStateException("无法创建 RAW 相册文件")
+
+        try {
+            context.contentResolver.openOutputStream(uri)?.use { output ->
+                sourceFile.inputStream().buffered().use { input -> input.copyTo(output) }
+            } ?: throw IllegalStateException("无法写入 RAW 相册文件")
+            finalizePendingImage(uri)
+            return uri
+        } catch (error: Exception) {
+            context.contentResolver.delete(uri, null, null)
+            throw error
+        }
     }
 
     fun finalizePendingImage(uri: Uri) {
@@ -74,8 +99,12 @@ class MediaStoreManager(
     }
 
     private fun createImageContentValues(prefix: String, mimeType: String): ContentValues {
+        val extension = if (mimeType == DNG_MIME_TYPE) ".dng" else ".jpg"
         return ContentValues().apply {
-            put(MediaStore.MediaColumns.DISPLAY_NAME, "${prefix}_${TIMESTAMP_FORMAT.format(Date())}")
+            put(
+                MediaStore.MediaColumns.DISPLAY_NAME,
+                "${prefix}_${TIMESTAMP_FORMAT.format(Date())}$extension"
+            )
             put(MediaStore.MediaColumns.MIME_TYPE, mimeType)
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
                 put(
@@ -89,6 +118,7 @@ class MediaStoreManager(
 
     private companion object {
         const val JPEG_QUALITY = 95
+        const val DNG_MIME_TYPE = "image/x-adobe-dng"
         val TIMESTAMP_FORMAT = SimpleDateFormat("yyyyMMdd_HHmmss_SSS", Locale.US)
     }
 }
