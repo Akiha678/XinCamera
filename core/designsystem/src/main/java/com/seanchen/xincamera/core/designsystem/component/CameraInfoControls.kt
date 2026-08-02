@@ -3,31 +3,32 @@ package com.seanchen.xincamera.core.designsystem.component
 import android.graphics.Paint
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.StrokeCap
-import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.nativeCanvas
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 
@@ -48,7 +49,8 @@ data class CameraScaleTick(
 @Composable
 fun CameraInfoBar(
     items: List<CameraInfoItem>,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    onItemClick: (Int) -> Unit = {}
 ) {
     Row(
         modifier = modifier
@@ -59,10 +61,15 @@ fun CameraInfoBar(
         horizontalArrangement = Arrangement.SpaceBetween,
         verticalAlignment = Alignment.CenterVertically
     ) {
-        items.forEach { item ->
+        items.forEachIndexed { index, item ->
             CameraInfoTile(
                 item = item,
-                modifier = Modifier.weight(1f)
+                modifier = Modifier
+                    .weight(1f)
+                    .clickable(
+                        enabled = !item.isMuted,
+                        onClick = { onItemClick(index) }
+                    )
             )
         }
     }
@@ -126,63 +133,144 @@ private fun CameraInfoTile(
 
 @Composable
 fun CameraHorizontalScale(
+    parameterLabel: String,
     valueLabel: String,
     ticks: List<CameraScaleTick>,
     currentRatio: Float,
     onRatioChanged: (Float) -> Unit,
     modifier: Modifier = Modifier,
     enabled: Boolean = true,
-    dragRangePx: Float = 320f
+    actionLabel: String = "AUTO",
+    actionActive: Boolean = false,
+    onActionClick: () -> Unit = {}
 ) {
+    val latestRatio by rememberUpdatedState(currentRatio)
+    val latestOnRatioChanged by rememberUpdatedState(onRatioChanged)
     Surface(
         modifier = modifier
             .fillMaxWidth()
-            .height(102.dp)
-            .pointerInput(enabled) {
+            .height(132.dp)
+            .pointerInput(enabled, ticks.size) {
                 if (enabled) {
-                    detectHorizontalDragGestures { change, dragAmount ->
-                        change.consume()
-                        onRatioChanged((currentRatio + dragAmount / dragRangePx).coerceIn(0f, 1f))
-                    }
+                    var gestureRatio = latestRatio
+                    val totalDragRange = (ticks.lastIndex.coerceAtLeast(1) * 34.dp.toPx())
+                    detectHorizontalDragGestures(
+                        onDragStart = { gestureRatio = latestRatio },
+                        onHorizontalDrag = { change, dragAmount ->
+                            change.consume()
+                            gestureRatio = (gestureRatio - dragAmount / totalDragRange)
+                                .coerceIn(0f, 1f)
+                            latestOnRatioChanged(gestureRatio)
+                        }
+                    )
                 }
             },
-        shape = RoundedCornerShape(0.dp),
-        color = Color(0xE80A0F17)
+        shape = RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp),
+        color = Color(0xF20A0F17)
     ) {
-        Box(modifier = Modifier.fillMaxSize()) {
-            Canvas(modifier = Modifier.fillMaxSize()) {
+        Column(modifier = Modifier.fillMaxSize()) {
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(50.dp)
+                    .padding(horizontal = 18.dp)
+            ) {
+                Text(
+                    modifier = Modifier.align(Alignment.CenterStart),
+                    text = parameterLabel,
+                    color = Color(0x99FFFFFF),
+                    fontSize = 12.sp,
+                    fontWeight = FontWeight.Bold,
+                    maxLines = 1
+                )
+                Text(
+                    modifier = Modifier.align(Alignment.Center),
+                    text = valueLabel,
+                    color = Color(0xFFFFD39A),
+                    fontSize = 22.sp,
+                    fontWeight = FontWeight.Bold,
+                    maxLines = 1
+                )
+                Surface(
+                    modifier = Modifier
+                        .align(Alignment.CenterEnd)
+                        .size(width = 68.dp, height = 34.dp),
+                    shape = RoundedCornerShape(17.dp),
+                    color = when {
+                        !enabled -> Color(0x774A5260)
+                        actionActive -> Color(0xFF339AF0)
+                        else -> Color(0xFF252D38)
+                    },
+                    onClick = onActionClick,
+                    enabled = enabled
+                ) {
+                    Box(contentAlignment = Alignment.Center) {
+                        Text(
+                            text = actionLabel,
+                            color = Color.White,
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.Bold,
+                            maxLines = 1
+                        )
+                    }
+                }
+            }
+
+            Canvas(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(82.dp)
+            ) {
                 val centerX = size.width / 2f
-                val baselineY = size.height * 0.70f
-                val tickTopY = size.height * 0.48f
-                val tickBottomY = size.height * 0.70f
-                val labelY = size.height * 0.34f
+                val baselineY = size.height * 0.65f
+                val tickBottomY = baselineY
+                val labelY = size.height * 0.28f
+                val tickSpacing = 34.dp.toPx()
+                val ratioSpan = ticks.lastIndex.coerceAtLeast(1)
                 val textPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
                     color = android.graphics.Color.WHITE
-                    textSize = 13.sp.toPx()
+                    textSize = 11.sp.toPx()
                     textAlign = Paint.Align.CENTER
-                    alpha = if (enabled) 200 else 90
                     typeface = android.graphics.Typeface.create(
                         android.graphics.Typeface.DEFAULT,
-                        android.graphics.Typeface.BOLD
+                        android.graphics.Typeface.NORMAL
                     )
                 }
                 drawLine(
-                    color = Color(0x22FFFFFF),
-                    start = Offset(0f, baselineY),
-                    end = Offset(size.width, baselineY),
+                    color = Color(0x18FFFFFF),
+                    start = Offset(16.dp.toPx(), baselineY),
+                    end = Offset(size.width - 16.dp.toPx(), baselineY),
                     strokeWidth = 1.dp.toPx()
                 )
                 ticks.forEach { tick ->
-                    val x = centerX + (tick.ratio - currentRatio) * size.width * 0.95f
+                    val x = centerX +
+                        (tick.ratio - currentRatio) * ratioSpan * tickSpacing
                     if (x in 0f..size.width) {
+                        val isSelected = kotlin.math.abs(tick.ratio - currentRatio) <
+                            0.45f / ratioSpan
+                        val tickHeight = when {
+                            isSelected -> 26.dp.toPx()
+                            tick.isMajor -> 18.dp.toPx()
+                            else -> 10.dp.toPx()
+                        }
                         drawLine(
-                            color = if (tick.isMajor) Color(0xBBFFFFFF) else Color(0x55FFFFFF),
-                            start = Offset(x, if (tick.isMajor) tickTopY else tickTopY + 9.dp.toPx()),
+                            color = when {
+                                isSelected -> Color(0xFFFFD39A)
+                                tick.isMajor -> Color(0xA6FFFFFF)
+                                else -> Color(0x4DFFFFFF)
+                            },
+                            start = Offset(x, tickBottomY - tickHeight),
                             end = Offset(x, tickBottomY),
-                            strokeWidth = if (tick.isMajor) 2.dp.toPx() else 1.dp.toPx(),
+                            strokeWidth = if (isSelected) 2.5.dp.toPx() else 1.5.dp.toPx(),
                             cap = StrokeCap.Round
                         )
                         if (tick.isMajor) {
+                            textPaint.color = if (isSelected) {
+                                android.graphics.Color.rgb(255, 211, 154)
+                            } else {
+                                android.graphics.Color.WHITE
+                            }
+                            textPaint.alpha = if (enabled) 210 else 80
                             drawContext.canvas.nativeCanvas.drawText(
                                 tick.label,
                                 x,
@@ -193,59 +281,19 @@ fun CameraHorizontalScale(
                     }
                 }
                 drawLine(
-                    color = Color(0xFF36A3FF),
-                    start = Offset(centerX, size.height * 0.44f),
-                    end = Offset(centerX, size.height * 0.82f),
-                    strokeWidth = 2.dp.toPx(),
+                    color = Color(0xFFFFD39A),
+                    start = Offset(centerX, baselineY - 31.dp.toPx()),
+                    end = Offset(centerX, baselineY + 10.dp.toPx()),
+                    strokeWidth = 2.5.dp.toPx(),
                     cap = StrokeCap.Round
                 )
                 val pointer = androidx.compose.ui.graphics.Path().apply {
-                    moveTo(centerX, size.height * 0.82f)
-                    lineTo(centerX - 5.dp.toPx(), size.height * 0.90f)
-                    lineTo(centerX + 5.dp.toPx(), size.height * 0.90f)
+                    moveTo(centerX, baselineY + 14.dp.toPx())
+                    lineTo(centerX - 5.dp.toPx(), baselineY + 7.dp.toPx())
+                    lineTo(centerX + 5.dp.toPx(), baselineY + 7.dp.toPx())
                     close()
                 }
-                drawPath(pointer, Color(0xFF36A3FF))
-            }
-
-            Surface(
-                modifier = Modifier
-                    .align(Alignment.TopCenter)
-                    .width(88.dp)
-                    .height(50.dp),
-                shape = RoundedCornerShape(4.dp),
-                color = Color(0xEE111722),
-                border = androidx.compose.foundation.BorderStroke(1.dp, Color(0x33FFFFFF))
-            ) {
-                Box(contentAlignment = Alignment.Center) {
-                    Text(
-                        text = valueLabel,
-                        color = Color.White,
-                        fontSize = 24.sp,
-                        fontWeight = FontWeight.Bold,
-                        textAlign = TextAlign.Center,
-                        maxLines = 1
-                    )
-                }
-            }
-
-            Surface(
-                modifier = Modifier
-                    .align(Alignment.CenterEnd)
-                    .padding(end = 16.dp)
-                    .size(width = 66.dp, height = 44.dp),
-                shape = RoundedCornerShape(9.dp),
-                color = if (enabled) Color(0xFF339AF0) else Color(0x774A5260)
-            ) {
-                Box(contentAlignment = Alignment.Center) {
-                    Text(
-                        text = valueLabel,
-                        color = Color.White,
-                        fontSize = 16.sp,
-                        fontWeight = FontWeight.Bold,
-                        maxLines = 1
-                    )
-                }
+                drawPath(pointer, Color(0xFFFFD39A))
             }
         }
     }

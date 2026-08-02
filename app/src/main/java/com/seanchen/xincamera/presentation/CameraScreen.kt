@@ -2,7 +2,6 @@ package com.seanchen.xincamera.presentation
 
 import android.Manifest
 import android.annotation.SuppressLint
-import android.content.Context
 import android.content.pm.PackageManager
 import android.view.GestureDetector
 import android.view.MotionEvent
@@ -32,17 +31,13 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.requiredHeightIn
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.systemBars
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material3.Button
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Slider
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
@@ -65,7 +60,6 @@ import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -75,11 +69,15 @@ import androidx.lifecycle.compose.LocalLifecycleOwner
 import com.seanchen.xincamera.R
 import com.seanchen.xincamera.camera.CameraController
 import com.seanchen.xincamera.core.designsystem.component.CameraIconButton
+import com.seanchen.xincamera.core.designsystem.component.CameraHorizontalScale
+import com.seanchen.xincamera.core.designsystem.component.CameraInfoBar
+import com.seanchen.xincamera.core.designsystem.component.CameraInfoItem
+import com.seanchen.xincamera.core.designsystem.component.CameraScaleTick
 import com.seanchen.xincamera.domain.model.ProfessionalCameraCapabilities
 import com.seanchen.xincamera.domain.model.ProfessionalCameraSettings
 import com.seanchen.xincamera.domain.model.WhiteBalancePreset
-import kotlin.math.exp
-import kotlin.math.ln
+import kotlin.math.abs
+import kotlin.math.roundToInt
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
@@ -128,6 +126,11 @@ private enum class CameraAppDestination {
     Settings
 }
 
+private enum class ExposureControl {
+    ISO,
+    SHUTTER
+}
+
 /**
  * 主相机页由 CameraX 预览和 Compose 覆盖层组成。
  *
@@ -159,7 +162,9 @@ private fun CameraScreen(
     var torchAvailable by rememberSaveable { mutableStateOf(false) }
     var statusMessage by rememberSaveable { mutableStateOf("") }
     var focusPoint by remember { mutableStateOf<Offset?>(null) }
-    var showSettingsPanel by rememberSaveable { mutableStateOf(false) }
+    var selectedExposureControl by rememberSaveable {
+        mutableStateOf<ExposureControl?>(null)
+    }
     var isCapturing by rememberSaveable { mutableStateOf(false) }
     var isProcessingGrayscale by rememberSaveable { mutableStateOf(false) }
     var lastCapturedUri by rememberSaveable { mutableStateOf<String?>(null) }
@@ -168,13 +173,9 @@ private fun CameraScreen(
         mutableStateOf(ProfessionalCameraCapabilities())
     }
     var selectedIso by rememberSaveable { mutableIntStateOf(100) }
-    var selectedExposureRatio by rememberSaveable { mutableFloatStateOf(0.45f) }
-    var selectedWhiteBalanceIndex by rememberSaveable {
-        mutableIntStateOf(WhiteBalancePreset.AUTO.ordinal)
-    }
+    var selectedExposureTimeNs by rememberSaveable { mutableStateOf(16_666_667L) }
     var histogramBins by remember { mutableStateOf(IntArray(256)) }
     val focusScope = rememberCoroutineScope()
-    val whiteBalancePreset = WhiteBalancePreset.entries[selectedWhiteBalanceIndex]
 
     val gestureDetector = remember(previewView, cameraController) {
         GestureDetector(
@@ -246,8 +247,13 @@ private fun CameraScreen(
             onProfessionalCapabilitiesChanged = { capabilities ->
                 professionalCapabilities = capabilities
                 selectedIso = selectedIso.coerceIn(capabilities.isoMin, capabilities.isoMax)
+                selectedExposureTimeNs = selectedExposureTimeNs.coerceIn(
+                    capabilities.exposureTimeMinNs,
+                    capabilities.exposureTimeMaxNs
+                )
                 if (!capabilities.supportsManualExposure) {
                     manualExposureEnabled = false
+                    selectedExposureControl = null
                 }
             },
             onHistogramChanged = { histogram ->
@@ -265,8 +271,7 @@ private fun CameraScreen(
     LaunchedEffect(
         manualExposureEnabled,
         selectedIso,
-        selectedExposureRatio,
-        selectedWhiteBalanceIndex,
+        selectedExposureTimeNs,
         professionalCapabilities
     ) {
         cameraController.updateProfessionalSettings(
@@ -280,15 +285,14 @@ private fun CameraScreen(
                     null
                 },
                 exposureTimeNs = if (manualExposureEnabled && professionalCapabilities.supportsManualExposure) {
-                    ratioToExposureTimeNs(
-                        ratio = selectedExposureRatio,
-                        minNs = professionalCapabilities.exposureTimeMinNs,
-                        maxNs = professionalCapabilities.exposureTimeMaxNs
+                    selectedExposureTimeNs.coerceIn(
+                        professionalCapabilities.exposureTimeMinNs,
+                        professionalCapabilities.exposureTimeMaxNs
                     )
                 } else {
                     null
                 },
-                whiteBalancePreset = whiteBalancePreset
+                whiteBalancePreset = WhiteBalancePreset.AUTO
             )
         )
     }
@@ -344,69 +348,60 @@ private fun CameraScreen(
                 .align(Alignment.BottomCenter)
                 .padding(WindowInsets.navigationBars.asPaddingValues())
         ) {
-            CameraBottomControls(
-                isCapturing = isCapturing,
-                onCapture = {
-                    if (isCapturing) {
-                        return@CameraBottomControls
-                    }
-                    isCapturing = true
-                    statusMessage = "正在拍摄"
-                    cameraController.capturePhoto(
-                        onSaved = { outputPath ->
-                            isCapturing = false
-                            lastCapturedUri = outputPath.takeIf { it.startsWith("content://") }
-                            statusMessage = ""
-                        },
-                        onError = { error ->
-                            isCapturing = false
-                            statusMessage = error
-                        }
-                    )
-                }
-            )
-        }
-
-        AnimatedVisibility(
-            modifier = Modifier
-                .align(Alignment.BottomCenter)
-                .padding(start = 16.dp, end = 16.dp, bottom = 148.dp),
-            visible = showSettingsPanel,
-            enter = slideInVertically(initialOffsetY = { it / 2 }) + fadeIn(),
-            exit = slideOutVertically(targetOffsetY = { it / 2 }) + fadeOut()
-        ) {
-            ProfessionalSettingsPanel(
+            ProfessionalExposureControls(
                 capabilities = professionalCapabilities,
                 manualExposureEnabled = manualExposureEnabled,
                 selectedIso = selectedIso,
-                exposureRatio = selectedExposureRatio,
-                whiteBalancePreset = whiteBalancePreset,
-                statusMessage = statusMessage,
-                onDismiss = { showSettingsPanel = false },
-                onManualExposureEnabledChange = { enabled ->
+                selectedExposureTimeNs = selectedExposureTimeNs,
+                selectedControl = selectedExposureControl,
+                onControlSelected = { control ->
                     if (professionalCapabilities.supportsManualExposure) {
-                        manualExposureEnabled = enabled
-                        statusMessage = if (enabled) {
-                            "手动曝光"
+                        selectedExposureControl = if (selectedExposureControl == control) {
+                            null
                         } else {
-                            "自动曝光"
+                            control
                         }
+                    } else {
+                        statusMessage = "当前镜头不支持手动 ISO / 快门控制"
                     }
+                },
+                onAutoSelected = {
+                    manualExposureEnabled = false
+                    statusMessage = "自动曝光"
                 },
                 onIsoChanged = { iso ->
                     if (professionalCapabilities.supportsManualExposure) {
                         manualExposureEnabled = true
                         selectedIso = iso
+                        statusMessage = "手动曝光"
                     }
                 },
-                onExposureRatioChanged = { ratio ->
+                onExposureTimeChanged = { exposureTimeNs ->
                     if (professionalCapabilities.supportsManualExposure) {
                         manualExposureEnabled = true
-                        selectedExposureRatio = ratio
+                        selectedExposureTimeNs = exposureTimeNs
+                        statusMessage = "手动曝光"
                     }
                 },
-                onWhiteBalanceChanged = { preset ->
-                    selectedWhiteBalanceIndex = preset.ordinal
+                isCapturing = isCapturing,
+                onCapture = {
+                    if (!isCapturing) {
+                        isCapturing = true
+                        statusMessage = "正在拍摄"
+                        cameraController.capturePhoto(
+                            onSaved = { outputPath ->
+                                isCapturing = false
+                                lastCapturedUri = outputPath.takeIf {
+                                    it.startsWith("content://")
+                                }
+                                statusMessage = ""
+                            },
+                            onError = { error ->
+                                isCapturing = false
+                                statusMessage = error
+                            }
+                        )
+                    }
                 }
             )
         }
@@ -737,155 +732,111 @@ private fun CaptureButton(
 }
 
 @Composable
-private fun ProfessionalSettingsPanel(
+private fun ProfessionalExposureControls(
     capabilities: ProfessionalCameraCapabilities,
     manualExposureEnabled: Boolean,
     selectedIso: Int,
-    exposureRatio: Float,
-    whiteBalancePreset: WhiteBalancePreset,
-    statusMessage: String,
-    onDismiss: () -> Unit,
-    onManualExposureEnabledChange: (Boolean) -> Unit,
+    selectedExposureTimeNs: Long,
+    selectedControl: ExposureControl?,
+    onControlSelected: (ExposureControl) -> Unit,
+    onAutoSelected: () -> Unit,
     onIsoChanged: (Int) -> Unit,
-    onExposureRatioChanged: (Float) -> Unit,
-    onWhiteBalanceChanged: (WhiteBalancePreset) -> Unit
+    onExposureTimeChanged: (Long) -> Unit,
+    isCapturing: Boolean,
+    onCapture: () -> Unit
 ) {
-    val context = LocalContext.current
-    val exposureTimeNs = ratioToExposureTimeNs(
-        ratio = exposureRatio,
-        minNs = capabilities.exposureTimeMinNs,
-        maxNs = capabilities.exposureTimeMaxNs
-    )
+    val isoValues = remember(capabilities) { buildIsoValues(capabilities) }
+    val exposureValues = remember(capabilities) { buildExposureTimeValues(capabilities) }
+    val isoIndex = isoValues.indexOfNearestIso(selectedIso)
+    val exposureIndex = exposureValues.indexOfNearestExposure(selectedExposureTimeNs)
 
-    Surface(
-        modifier = Modifier
-            .fillMaxWidth()
-            .requiredHeightIn(min = 320.dp),
-        shape = RoundedCornerShape(28.dp),
-        color = Color(0xE611161C),
-        border = BorderStroke(1.dp, Color(0x22FFFFFF))
-    ) {
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(20.dp),
-            verticalArrangement = Arrangement.spacedBy(14.dp)
+    Column(modifier = Modifier.fillMaxWidth()) {
+        AnimatedVisibility(
+            visible = selectedControl != null,
+            enter = slideInVertically(initialOffsetY = { it / 2 }) + fadeIn(),
+            exit = slideOutVertically(targetOffsetY = { it / 2 }) + fadeOut()
         ) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Text(
-                    text = stringResource(R.string.camera_setting_title),
-                    style = MaterialTheme.typography.titleMedium,
-                    color = Color.White
+            when (selectedControl) {
+                ExposureControl.ISO -> CameraHorizontalScale(
+                    parameterLabel = "ISO 感光度",
+                    valueLabel = selectedIso.toString(),
+                    ticks = isoValues.mapIndexed { index, value ->
+                        CameraScaleTick(
+                            ratio = index.toScaleRatio(isoValues.size),
+                            label = value.toString(),
+                            isMajor = value == capabilities.isoMin ||
+                                value == capabilities.isoMax ||
+                                value in setOf(100, 200, 400, 800, 1600, 3200, 6400)
+                        )
+                    },
+                    currentRatio = isoIndex.toScaleRatio(isoValues.size),
+                    onRatioChanged = { ratio ->
+                        onIsoChanged(isoValues[ratio.toScaleIndex(isoValues.size)])
+                    },
+                    enabled = capabilities.supportsManualExposure,
+                    actionActive = !manualExposureEnabled,
+                    onActionClick = onAutoSelected
                 )
-                TextButton(onClick = onDismiss) {
-                    Text(text = stringResource(R.string.camera_setting_close))
-                }
-            }
-            Text(
-                text = statusMessage.ifBlank {
-                    stringResource(R.string.camera_setting_hint)
-                },
-                color = Color(0xFFD8DEE5),
-                style = MaterialTheme.typography.bodySmall,
-                maxLines = 2,
-                overflow = TextOverflow.Ellipsis
-            )
-            TextButton(
-                onClick = { onManualExposureEnabledChange(!manualExposureEnabled) }
-            ) {
-                Text(
-                    text = if (manualExposureEnabled) {
-                        stringResource(R.string.camera_manual_enabled)
-                    } else {
-                        stringResource(R.string.camera_manual_disabled)
-                    }
+
+                ExposureControl.SHUTTER -> CameraHorizontalScale(
+                    parameterLabel = "快门速度",
+                    valueLabel = formatExposureTime(selectedExposureTimeNs),
+                    ticks = exposureValues.mapIndexed { index, value ->
+                        CameraScaleTick(
+                            ratio = index.toScaleRatio(exposureValues.size),
+                            label = formatExposureTime(value),
+                            isMajor = index % 2 == 0 ||
+                                value == exposureValues.first() ||
+                                value == exposureValues.last()
+                        )
+                    },
+                    currentRatio = exposureIndex.toScaleRatio(exposureValues.size),
+                    onRatioChanged = { ratio ->
+                        onExposureTimeChanged(
+                            exposureValues[ratio.toScaleIndex(exposureValues.size)]
+                        )
+                    },
+                    enabled = capabilities.supportsManualExposure,
+                    actionActive = !manualExposureEnabled,
+                    onActionClick = onAutoSelected
                 )
+
+                null -> Unit
             }
-            ProSliderSection(
-                title = stringResource(R.string.camera_iso_title),
-                valueLabel = if (capabilities.supportsManualExposure) {
-                    "ISO $selectedIso"
-                } else {
-                    stringResource(R.string.camera_setting_not_supported)
-                },
-                enabled = capabilities.supportsManualExposure,
-                value = selectedIso.toFloat().coerceIn(
-                    capabilities.isoMin.toFloat(),
-                    capabilities.isoMax.toFloat()
+        }
+
+        CameraInfoBar(
+            items = listOf(
+                CameraInfoItem(
+                    label = "ISO",
+                    value = if (manualExposureEnabled) selectedIso.toString() else "AUTO",
+                    autoLabel = if (manualExposureEnabled) null else "A",
+                    isActive = selectedControl == ExposureControl.ISO,
+                    isMuted = !capabilities.supportsManualExposure
                 ),
-                range = capabilities.isoMin.toFloat()..capabilities.isoMax.toFloat(),
-                onValueChange = { onIsoChanged(it.toInt()) }
-            )
-            ProSliderSection(
-                title = stringResource(R.string.camera_shutter_title),
-                valueLabel = if (capabilities.supportsManualExposure) {
-                    formatExposureTime(exposureTimeNs)
-                } else {
-                    stringResource(R.string.camera_setting_not_supported)
-                },
-                enabled = capabilities.supportsManualExposure,
-                value = exposureRatio,
-                range = 0f..1f,
-                onValueChange = onExposureRatioChanged
-            )
-            ProSliderSection(
-                title = stringResource(R.string.camera_white_balance_title),
-                valueLabel = whiteBalanceLabel(context, whiteBalancePreset),
-                enabled = true,
-                value = whiteBalancePreset.ordinal.toFloat(),
-                range = 0f..WhiteBalancePreset.entries.lastIndex.toFloat(),
-                steps = WhiteBalancePreset.entries.size - 2,
-                onValueChange = { sliderValue ->
-                    onWhiteBalanceChanged(
-                        WhiteBalancePreset.entries[
-                            sliderValue.toInt().coerceIn(0, WhiteBalancePreset.entries.lastIndex)
-                        ]
-                    )
-                }
-            )
-        }
-    }
-}
+                CameraInfoItem(
+                    label = "S",
+                    value = if (manualExposureEnabled) {
+                        formatExposureTime(selectedExposureTimeNs)
+                    } else {
+                        "AUTO"
+                    },
+                    autoLabel = if (manualExposureEnabled) null else "A",
+                    isActive = selectedControl == ExposureControl.SHUTTER,
+                    isMuted = !capabilities.supportsManualExposure
+                )
+            ),
+            modifier = Modifier.padding(horizontal = 16.dp),
+            onItemClick = { index ->
+                onControlSelected(
+                    if (index == 0) ExposureControl.ISO else ExposureControl.SHUTTER
+                )
+            }
+        )
 
-@Composable
-private fun ProSliderSection(
-    title: String,
-    valueLabel: String,
-    enabled: Boolean,
-    value: Float,
-    range: ClosedFloatingPointRange<Float>,
-    onValueChange: (Float) -> Unit,
-    steps: Int = 0
-) {
-    Column(
-        verticalArrangement = Arrangement.spacedBy(6.dp)
-    ) {
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Text(
-                text = title,
-                color = Color.White,
-                style = MaterialTheme.typography.labelLarge
-            )
-            Text(
-                text = valueLabel,
-                color = Color(0xFFFFD39A),
-                style = MaterialTheme.typography.labelMedium
-            )
-        }
-        Slider(
-            value = value,
-            onValueChange = onValueChange,
-            valueRange = range,
-            enabled = enabled,
-            steps = steps
+        CameraBottomControls(
+            isCapturing = isCapturing,
+            onCapture = onCapture
         )
     }
 }
@@ -908,19 +859,51 @@ private fun FocusRing(
     ) {}
 }
 
-private fun ratioToExposureTimeNs(
-    ratio: Float,
-    minNs: Long,
-    maxNs: Long
-): Long {
-    if (minNs >= maxNs) {
-        return minNs
-    }
-    val clampedRatio = ratio.coerceIn(0f, 1f).toDouble()
-    val minLog = ln(minNs.toDouble())
-    val maxLog = ln(maxNs.toDouble())
-    return exp(minLog + (maxLog - minLog) * clampedRatio).toLong()
+private fun buildIsoValues(capabilities: ProfessionalCameraCapabilities): List<Int> {
+    val standardValues = listOf(
+        25, 32, 40, 50, 64, 80, 100, 125, 160, 200, 250, 320, 400,
+        500, 640, 800, 1000, 1250, 1600, 2000, 2500, 3200, 4000,
+        5000, 6400, 8000, 10000, 12800, 16000, 25600, 51200, 102400
+    )
+    return (standardValues + capabilities.isoMin + capabilities.isoMax)
+        .filter { it in capabilities.isoMin..capabilities.isoMax }
+        .distinct()
+        .sorted()
+        .ifEmpty { listOf(capabilities.isoMin) }
 }
+
+private fun buildExposureTimeValues(
+    capabilities: ProfessionalCameraCapabilities
+): List<Long> {
+    val reciprocalValues = listOf(
+        16000, 12000, 8000, 6400, 4000, 3200, 2000, 1600, 1000, 800,
+        640, 500, 400, 320, 250, 200, 160, 125, 100, 80, 60, 50, 40, 30,
+        25, 20, 15, 13, 10, 8, 6, 5, 4, 3, 2
+    ).map { denominator -> 1_000_000_000L / denominator }
+    val wholeSecondValues = listOf(1L, 2L, 4L, 8L, 15L, 30L)
+        .map { seconds -> seconds * 1_000_000_000L }
+
+    return (reciprocalValues + wholeSecondValues +
+        capabilities.exposureTimeMinNs + capabilities.exposureTimeMaxNs)
+        .filter {
+            it in capabilities.exposureTimeMinNs..capabilities.exposureTimeMaxNs
+        }
+        .distinct()
+        .sorted()
+        .ifEmpty { listOf(capabilities.exposureTimeMinNs) }
+}
+
+private fun List<Int>.indexOfNearestIso(value: Int): Int =
+    indices.minByOrNull { index -> abs(this[index].toLong() - value.toLong()) } ?: 0
+
+private fun List<Long>.indexOfNearestExposure(value: Long): Int =
+    indices.minByOrNull { index -> abs(this[index] - value) } ?: 0
+
+private fun Int.toScaleRatio(itemCount: Int): Float =
+    if (itemCount <= 1) 0f else toFloat() / (itemCount - 1).toFloat()
+
+private fun Float.toScaleIndex(itemCount: Int): Int =
+    if (itemCount <= 1) 0 else (coerceIn(0f, 1f) * (itemCount - 1)).roundToInt()
 
 @SuppressLint("DefaultLocale")
 private fun formatExposureTime(
@@ -928,27 +911,13 @@ private fun formatExposureTime(
 ): String {
     val seconds = exposureTimeNs / 1_000_000_000.0
     return if (seconds >= 1.0) {
-        String.format("%.1fs", seconds)
+        if (seconds % 1.0 < 0.05) {
+            "${seconds.toInt()}s"
+        } else {
+            String.format("%.1fs", seconds)
+        }
     } else {
-        val reciprocal = (1.0 / seconds).toInt().coerceAtLeast(1)
-        "1/$reciprocal s"
-    }
-}
-
-private fun whiteBalanceLabel(
-    context: Context,
-    preset: WhiteBalancePreset
-): String {
-    return when (preset) {
-        WhiteBalancePreset.AUTO -> context.getString(R.string.camera_white_balance_auto)
-        WhiteBalancePreset.INCANDESCENT -> context.getString(
-            R.string.camera_white_balance_incandescent
-        )
-        WhiteBalancePreset.FLUORESCENT -> context.getString(
-            R.string.camera_white_balance_fluorescent
-        )
-        WhiteBalancePreset.DAYLIGHT -> context.getString(R.string.camera_white_balance_daylight)
-        WhiteBalancePreset.CLOUDY -> context.getString(R.string.camera_white_balance_cloudy)
-        WhiteBalancePreset.SHADE -> context.getString(R.string.camera_white_balance_shade)
+        val reciprocal = (1.0 / seconds).roundToInt().coerceAtLeast(1)
+        "1/$reciprocal"
     }
 }
