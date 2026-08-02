@@ -1,4 +1,14 @@
+<div align="center">
+<img src="docs/images/xincamera_logo.png" width="120" alt="Logo"/>
+
 # XinCamera
+
+基于 JNI 和Jetpack Compose 的相机程序
+
+<div align="center">
+    <a href="README_EN.md">🌍 English</a>
+</div>
+
 
 ![Platform](https://img.shields.io/badge/platform-Android-3DDC84?style=flat-square)
 ![Kotlin](https://img.shields.io/badge/Kotlin-2.2.10-7F52FF?style=flat-square)
