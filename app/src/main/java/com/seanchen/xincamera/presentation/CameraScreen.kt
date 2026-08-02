@@ -88,6 +88,7 @@ fun CameraApp(
     nativeStatus: String
 ) {
     val context = LocalContext.current
+    var destination by rememberSaveable { mutableStateOf(CameraAppDestination.Camera) }
     var hasCameraPermission by remember {
         mutableStateOf(
             ContextCompat.checkSelfPermission(
@@ -109,53 +110,22 @@ fun CameraApp(
     }
 
     if (hasCameraPermission) {
-        CameraScreen(nativeStatus = nativeStatus)
-    } else {
-        PermissionScreen(
-            onGrantPermission = { permissionLauncher.launch(Manifest.permission.CAMERA) }
-        )
+        when (destination) {
+            CameraAppDestination.Camera -> CameraScreen(
+                nativeStatus = nativeStatus,
+                onOpenSettings = { destination = CameraAppDestination.Settings }
+            )
+
+            CameraAppDestination.Settings -> SettingRoute(
+                onBackClick = { destination = CameraAppDestination.Camera }
+            )
+        }
     }
 }
 
-/**
- * 获取权限界面
- *
- * 后续放进core/ui
- */
-@Composable
-private fun PermissionScreen(
-    onGrantPermission: () -> Unit
-) {
-    Box(
-        modifier = Modifier
-            .fillMaxSize()
-            .background(Color(0xFF05070A)),
-        contentAlignment = Alignment.Center
-    ) {
-        Column(
-            modifier = Modifier
-                .padding(24.dp)
-                .clip(RoundedCornerShape(28.dp))
-                .background(Color(0xCC11161C))
-                .padding(24.dp),
-            horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.spacedBy(12.dp)
-        ) {
-            Text(
-                text = stringResource(R.string.camera_permission_title),
-                style = MaterialTheme.typography.headlineSmall,
-                color = Color.White
-            )
-            Text(
-                text = stringResource(R.string.camera_permission_message),
-                style = MaterialTheme.typography.bodyMedium,
-                color = Color(0xFFD8DEE5)
-            )
-            Button(onClick = onGrantPermission) {
-                Text(text = stringResource(R.string.camera_permission_action))
-            }
-        }
-    }
+private enum class CameraAppDestination {
+    Camera,
+    Settings
 }
 
 /**
@@ -166,7 +136,8 @@ private fun PermissionScreen(
 @SuppressLint("ClickableViewAccessibility")
 @Composable
 private fun CameraScreen(
-    nativeStatus: String
+    nativeStatus: String,
+    onOpenSettings: () -> Unit
 ) {
     val context = LocalContext.current
     val lifecycleOwner = LocalLifecycleOwner.current
@@ -345,8 +316,8 @@ private fun CameraScreen(
             modifier = Modifier.align(Alignment.TopCenter),
             torchEnabled = torchEnabled,
             torchAvailable = torchAvailable,
-            showSettingsPanel = showSettingsPanel,
-            onToggleSettings = { showSettingsPanel = !showSettingsPanel },
+            showSettingsPanel = false,
+            onToggleSettings = onOpenSettings,
             onToggleTorch = {
                 if (torchAvailable) {
                     cameraController.setTorchEnabled(!torchEnabled)

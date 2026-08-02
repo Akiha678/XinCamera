@@ -8,16 +8,15 @@
 
 一个基于 **CameraX + Jetpack Compose + JNI/C++** 的 Android 相机学习项目。
 
-XinCamera 的目标不是做一个商业级相机，而是把真实相机 App 中常见的预览、拍摄、专业参数、图像分析和 native 图像处理拆成清晰模块，帮助你系统学习：
+XinCamera 的目标不仅仅是做一个相机APP，而是把专业微单中常见的预览、拍摄、专业参数、直方图和Raw图像处理拆成清晰模块，帮助你系统学习：
 
 - CameraX 预览、拍照、缩放、对焦、闪光灯和镜头切换
 - Camera2Interop 下发 ISO、快门速度、白平衡等专业参数
-- Compose 构建沉浸式相机界面
-- JNI 从 Kotlin 调用 C++ 图像算法
+- JNI 从 Kotlin 调用 C++ 图像算法实现直方图
 - C++ 处理 YUV / ARGB 像素数据
 - MediaStore 保存照片到系统相册
 
-## Preview
+## 预览
 
 当前主界面采用沉浸式相机布局：
 
@@ -53,18 +52,7 @@ XinCamera 的目标不是做一个商业级相机，而是把真实相机 App �
 - C++ 将 ARGB_8888 图片转换为灰度图
 - Kotlin 负责 Bitmap / URI / MediaStore，C++ 专注像素算法
 
-## Tech Stack
-
-| Layer | Tech |
-| --- | --- |
-| Language | Kotlin, C++ |
-| UI | Jetpack Compose, Material 3 |
-| Camera | CameraX, Camera2Interop |
-| Native | JNI, CMake, Android NDK |
-| Storage | MediaStore |
-| Build | Gradle Kotlin DSL, Android Gradle Plugin |
-
-## Architecture
+## 架构
 
 ```mermaid
 flowchart TD
@@ -82,7 +70,7 @@ flowchart TD
     Jni --> Filter["cpp/filter<br/>grayscale filter"]
 ```
 
-## Project Structure
+## 项目框架
 
 ```text
 XinCamera
@@ -128,29 +116,7 @@ XinCamera
 └── README.md
 ```
 
-## Architecture Notes
-
-这个项目采用接近企业项目的 JNI 分层方式：
-
-- `presentation`：只处理 Compose UI 和页面状态入口，不直接触碰 CameraX / JNI / MediaStore 细节。
-- `domain/model`：放稳定业务模型，例如专业参数、镜头能力和白平衡枚举。
-- `camera`：相机能力编排层。`CameraController` 是总入口，UseCase、Analyzer、Capture、Settings 分别拆分。
-- `nativebridge`：Kotlin 到 C++ 的边界。业务代码只调用 `NativeBridge`，`external fun` 集中在 `NativeMethods`。
-- `storage`：封装 MediaStore，统一处理 Android 版本兼容、pending 状态和失败回滚。
-- `cpp`：JNI 入口和 C++ 算法分离。`xincamera.cpp` 只做参数适配，算法按类型放到 `histogram`、`filter` 等目录。
-
-```text
-JNI call flow:
-
-CameraController
-└── NativeBridge
-    └── NativeMethods external fun
-        └── xincamera.cpp JNI adapter
-            ├── histogram/luma_histogram.cpp
-            └── filter/grayscale_filter.cpp
-```
-
-## Getting Started
+## 开始
 
 ### Requirements
 
