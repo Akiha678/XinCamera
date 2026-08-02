@@ -262,8 +262,8 @@ gray = (77 * red + 150 * green + 29 * blue) >> 8
 ## 👥联系方式
 欢迎添加我的联系方式。
 
-<div>
-    <img src="docs/images/qq.PNG" width="1206" alt="联系方式">
+<div align="left">
+    <img src="docs/images/qq.PNG" width="200" alt="联系方式">
 </div>
 
 ## 🤝 参与贡献
