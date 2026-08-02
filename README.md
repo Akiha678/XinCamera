@@ -15,6 +15,7 @@
 ![CameraX](https://img.shields.io/badge/CameraX-1.5.1-4285F4?style=flat-square)
 ![Compose](https://img.shields.io/badge/Jetpack%20Compose-Material3-00A98F?style=flat-square)
 ![JNI](https://img.shields.io/badge/JNI-C%2B%2B-00599C?style=flat-square)
+</div>
 
 一个基于 **CameraX + Jetpack Compose + JNI/C++** 的 Android 相机学习项目。
 
