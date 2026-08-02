@@ -17,51 +17,21 @@
 ![JNI](https://img.shields.io/badge/JNI-C%2B%2B-00599C?style=flat-square)
 </div>
 
-一个基于 **CameraX + Jetpack Compose + JNI/C++** 的 Android 相机学习项目。
+## 📖 项目简介
 
-XinCamera 的目标不仅仅是做一个相机APP，而是把专业微单中常见的预览、拍摄、专业参数、直方图和Raw图像处理拆成清晰模块，帮助你系统学习：
+这是一个基于 CameraX 、 Jetpack Compose 和 JNI/C++ 打造的开源相机学习项目，当前已实现基本功能。
+XinCamera 的目标不仅仅是做一个相机APP，而是把专业相机中常见的预览、拍摄、专业参数、直方图和Raw图像处理拆成清晰模块，
+帮助你系统学习JNI开发技术：
 
-- CameraX 预览、拍照、缩放、对焦、闪光灯和镜头切换
-- Camera2Interop 下发 ISO、快门速度、白平衡等专业参数
-- JNI 从 Kotlin 调用 C++ 图像算法实现直方图
-- C++ 处理 YUV / ARGB 像素数据
-- MediaStore 保存照片到系统相册
+作为个人开发者，我将平常的业余时间投入到这个项目中，我将不断完善这个项目，和大家一起探讨这个项目
 
-## 预览
-
-当前主界面采用沉浸式相机布局：
-
-- 顶部 AppBar：Setting、镜头切换、闪光灯
-- 中间区域：CameraX 实时预览和直方图叠层
-- 底部 BottomBar：Photo / 拍摄按钮 / Video
-- Setting Panel：调节 ISO、快门速度、白平衡
+> 如果项目对您有帮助，请给个 Star 支持 ⭐ 这对我来说很重要，能给我带来长期更新维护的动力！
 
 ## Features
+- CameraX 预览、拍照、缩放、对焦、闪光灯和镜头切换
+- Camera2Interop 下发 ISO、快门速度、白平衡等专业参数
+- JNI 从 Kotlin 调用 C++ 图像算法实现直方图、RAW拍摄、灰度图
 
-### Camera
-
-- 实时预览：基于 `PreviewView` + `CameraX Preview`
-- 拍照保存：通过 `ImageCapture` 写入系统相册
-- 镜头切换：支持前后摄像头切换
-- 变焦控制：支持滑杆和双指缩放
-- 点击对焦：支持 AF / AE / AWB metering
-- 闪光灯：支持可用性检测和开关控制
-- 沉浸式界面：启动后隐藏状态栏，内容延伸到屏幕顶部
-
-### Pro Controls
-
-- ISO 调节
-- 快门速度调节
-- 白平衡预设
-- Camera2Interop 专业参数下发
-- 自动检测当前镜头是否支持手动曝光
-
-### Native Image Processing
-
-- JNI 加载 `xincamera` native library
-- C++ 计算实时亮度直方图
-- C++ 将 ARGB_8888 图片转换为灰度图
-- Kotlin 负责 Bitmap / URI / MediaStore，C++ 专注像素算法
 
 ## 架构
 
@@ -128,17 +98,6 @@ XinCamera
 ```
 
 ## 开始
-
-### Requirements
-
-- Android Studio 最新稳定版或较新的 Canary 版本
-- Android SDK 37
-- Android NDK
-- CMake 3.22.1+
-- JDK 11+
-- 一台真机或支持 CameraX 的模拟器
-
-建议使用真机运行。相机、闪光灯、手动曝光等能力在模拟器上可能不完整。
 
 ### Clone
 
@@ -241,7 +200,7 @@ gray = (77 * red + 150 * green + 29 * blue) >> 8
 - [x] 第三部分：JNI/C++ 直方图
 - [x] 第四部分：JNI/C++ 灰度图
 - [ ] 第五部分：JNI/C++ 旋转图片
-- [ ] 第六部分：RAW拍摄
+- [x] 第六部分：RAW拍摄
 - [ ] 第七部分：美颜
 - [ ] 第八部分：LUT滤镜
 - [ ] 第九部分：HDR
@@ -260,6 +219,9 @@ gray = (77 * red + 150 * green + 29 * blue) >> 8
 
 # 安装到已连接设备
 ./gradlew :app:installDebug
+
+# 打包
+./gradlew clean :app:assembleRelease
 ```
 
 ## Notes
