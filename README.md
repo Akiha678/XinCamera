@@ -49,6 +49,23 @@ flowchart TD
     Methods --> Jni["xincamera.cpp<br/>JNI parameter adapter"]
     Jni --> Histogram["cpp/histogram<br/>luma histogram"]
     Jni --> Filter["cpp/filter<br/>grayscale filter"]
+    Jni --> Raw["cpp/raw<br/>DNG inspector"]
+```
+
+### JNI 调用链
+
+项目将 Kotlin 业务、JNI 类型转换和 C++ 算法拆成独立层，避免把所有逻辑堆积在 JNI 函数中：
+
+```text
+CameraCaptureManager / Analyzer
+        ↓
+NativeBridge.kt                 Kotlin 业务入口、参数检查、结果封装
+        ↓
+NativeMethods.kt                external 方法声明、加载 libxincamera.so
+        ↓ JNI
+xincamera.cpp                   jstring / jarray 与标准 C++ 类型互转
+        ↓
+dng_inspector.cpp 等 C++ 模块   执行与 Android、JNI 无关的核心算法
 ```
 
 ## 项目框架
@@ -60,14 +77,11 @@ XinCamera
 │   │   ├── MainActivity.kt
 │   │   ├── camera
 │   │   │   ├── Analyzer.kt
-│   │   │   ├── CameraCapabilities.kt
 │   │   │   ├── CameraCaptureManager.kt
 │   │   │   ├── CameraController.kt
-│   │   │   ├── CameraPreviewController.kt
 │   │   │   ├── CameraSettingsManager.kt
 │   │   │   └── CameraUseCaseManager.kt
 │   │   ├── domain
-│   │   │   ├── usecase
 │   │   │   └── model
 │   │   │       └── CameraModels.kt
 │   │   ├── nativebridge
@@ -86,13 +100,11 @@ XinCamera
 │       ├── histogram
 │       │   ├── luma_histogram.cpp
 │       │   └── luma_histogram.h
+│       ├── raw
+│       │   ├── dng_inspector.cpp
+│       │   └── dng_inspector.h
 │       ├── CMakeLists.txt
 │       └── xincamera.cpp
-├── core
-│   ├── ui
-│   └── designsystem
-│       └── theme
-│           └── Theme.kt
 ├── gradle/libs.versions.toml
 └── README.md
 ```
@@ -157,6 +169,27 @@ gray = 0.299R + 0.587G + 0.114B
 ```cpp
 gray = (77 * red + 150 * green + 29 * blue) >> 8
 ```
+
+### 4. RAW 拍摄与 DNG 校验
+
+开启 RAW 后，CameraX 会根据当前镜头能力优先输出 `RAW + JPEG`，设备只支持单独 RAW 时则输出 DNG。DNG 首先写入应用私有临时文件，再交给 JNI/C++ 校验：
+
+```kotlin
+val summary = NativeBridge.inspectRawDng(rawTempFile.absolutePath)
+if (!summary.isValid) {
+    throw IllegalStateException("JNI 检测到无效的 DNG 文件")
+}
+```
+
+`dng_inspector.cpp` 会执行以下处理：
+
+- 识别 TIFF 的 `II` 小端或 `MM` 大端字节序
+- 验证 TIFF Magic Number `42`
+- 遍历第一个 IFD，查找 `DNGVersion` 标签 `50706`
+- 使用 64 KB 缓冲区流式读取文件，避免将整个 RAW 文件载入内存
+- 计算 FNV-1a 64 位文件指纹并返回文件大小
+
+校验通过后，Kotlin 层才会将 DNG 导入系统相册。FNV-1a 用于快速文件标识和完整性检查。
 
 ## Roadmap
 

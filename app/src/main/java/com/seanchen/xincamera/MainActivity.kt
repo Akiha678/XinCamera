@@ -8,9 +8,9 @@ import androidx.compose.material3.Surface
 import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
+import com.seanchen.widget.ui.theme.AppTheme
 import com.seanchen.xincamera.nativebridge.NativeBridge
 import com.seanchen.xincamera.presentation.CameraApp
-import com.seanchen.xincamera.core.designsystem.theme.XinCameraTheme
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -21,8 +21,7 @@ class MainActivity : ComponentActivity() {
             val nativeStatus = runCatching {
                 NativeBridge.nativePreviewPipelineName()
             }.getOrDefault("JNI pending")
-
-            XinCameraTheme {
+            AppTheme {
                 Surface {
                     CameraApp(nativeStatus = nativeStatus)
                 }

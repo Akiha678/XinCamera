@@ -6,20 +6,32 @@
 namespace xincamera::raw {
 namespace {
 
-constexpr std::uint16_t kTiffMagic = 42;
-constexpr std::uint16_t kDngVersionTag = 50706;
+// DNG文件建立在TIFF格式之上，因此DNG文件要符合TIFF的基本结构
+constexpr std::uint16_t kTiffMagic = 42;    // 识别TIFF文件格式的魔数
+// 这个是TIFF/DNG数据中的标签编号
+constexpr std::uint16_t kDngVersionTag = 50706; //普通TIFF图片也拥有TIFF文件头，所以结合TIFF文件头 + DNG标签来判断是否属于DNG文件
+// FNV-1a 文件指纹: 用于计算FNV-1a 64位哈希来判断文件内容是否发生改变
 constexpr std::uint64_t kFnvOffsetBasis = 14695981039346656037ULL;
 constexpr std::uint64_t kFnvPrime = 1099511628211ULL;
 
+// 偏移 0～1：字节序 II 或 MM
+// 偏移 2～3：魔数 42
+// 偏移 4～7：第一个 IFD 的偏移量
+
+// 小端序
+// 从字节数组中读取一个16位无符号整数
 std::uint16_t ReadU16(const std::uint8_t* bytes, bool little_endian) {
     if (little_endian) {
         return static_cast<std::uint16_t>(bytes[0]) |
                (static_cast<std::uint16_t>(bytes[1]) << 8U);
     }
+    // 2A 00 -> 42
     return (static_cast<std::uint16_t>(bytes[0]) << 8U) |
            static_cast<std::uint16_t>(bytes[1]);
 }
 
+// 大端序
+// 读取的是32位整数
 std::uint32_t ReadU32(const std::uint8_t* bytes, bool little_endian) {
     if (little_endian) {
         return static_cast<std::uint32_t>(bytes[0]) |
@@ -27,17 +39,21 @@ std::uint32_t ReadU32(const std::uint8_t* bytes, bool little_endian) {
                (static_cast<std::uint32_t>(bytes[2]) << 16U) |
                (static_cast<std::uint32_t>(bytes[3]) << 24U);
     }
+    // 00 2A -> 42
     return (static_cast<std::uint32_t>(bytes[0]) << 24U) |
            (static_cast<std::uint32_t>(bytes[1]) << 16U) |
            (static_cast<std::uint32_t>(bytes[2]) << 8U) |
            static_cast<std::uint32_t>(bytes[3]);
 }
 
+// 遍历IFD，寻找DNGVersion标签
 bool HasDngVersionTag(
         std::ifstream& input,
         std::uint64_t file_size,
         std::uint32_t ifd_offset,
         bool little_endian) {
+    // 所以在这里判断文件是否损坏
+    // 如果文件损坏，里面记录的IFD偏移可能大于实际文件长度
     if (ifd_offset > file_size || static_cast<std::uint64_t>(ifd_offset) + 2 > file_size) {
         return false;
     }
@@ -70,10 +86,10 @@ DngSummary InspectDngFile(const std::string& path) {
     std::array<std::uint8_t, 8> header{};
     if (!input.read(reinterpret_cast<char*>(header.data()), header.size())) return {};
 
+    // DNG文件可能存在两个字节序
     const bool little_endian = header[0] == 'I' && header[1] == 'I';
     const bool big_endian = header[0] == 'M' && header[1] == 'M';
-    const bool valid_tiff = (little_endian || big_endian) &&
-                            ReadU16(header.data() + 2, little_endian) == kTiffMagic;
+    const bool valid_tiff = (little_endian || big_endian) && ReadU16(header.data() + 2, little_endian) == kTiffMagic;   // 在这里判断是不是标准的TIFF/DNG文件
     const std::uint32_t ifd_offset = ReadU32(header.data() + 4, little_endian);
     const bool valid_dng = valid_tiff && HasDngVersionTag(
             input,

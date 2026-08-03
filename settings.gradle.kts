@@ -19,10 +19,13 @@ dependencyResolutionManagement {
     repositories {
         google()
         mavenCentral()
+        maven {
+            url = uri("https://jitpack.io")
+        }
     }
 }
 
 rootProject.name = "XinCamera"
 include(":app")
-include(":core:designsystem")
-include(":core:ui")
+//include(":core:designsystem")
+//include(":core:ui")

@@ -1,4 +1,4 @@
-package com.seanchen.xincamera.core.designsystem.component
+package com.seanchen.xincamera.component
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable

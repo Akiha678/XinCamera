@@ -1,4 +1,4 @@
-package com.seanchen.xincamera.core.designsystem.component
+package com.seanchen.xincamera.component
 
 import android.graphics.Paint
 import androidx.compose.foundation.Canvas

@@ -41,7 +41,6 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.seanchen.xincamera.core.designsystem.theme.XinCameraTheme
 
 /**
  * 设置页入口层。
@@ -400,12 +399,3 @@ private object SettingColors {
     val SwitchOffTrack = Color(0xFF56565A)
 }
 
-@Preview(showBackground = true, widthDp = 363, heightDp = 800)
-@Composable
-private fun SettingPreview() {
-    XinCameraTheme {
-        Surface(color = MaterialTheme.colorScheme.background) {
-            SettingRoute()
-        }
-    }
-}

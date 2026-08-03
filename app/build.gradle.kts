@@ -58,7 +58,8 @@ android {
 }
 
 dependencies {
-    implementation(project(":core:designsystem"))
+    implementation(libs.common.widget)
+
     implementation(platform(libs.androidx.compose.bom))
     implementation(libs.androidx.activity.compose)
     implementation(libs.androidx.camera.camera2)

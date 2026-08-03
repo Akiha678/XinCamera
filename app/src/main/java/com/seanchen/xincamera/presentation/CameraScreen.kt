@@ -53,7 +53,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
-import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
@@ -68,11 +67,11 @@ import androidx.core.content.ContextCompat
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import com.seanchen.xincamera.R
 import com.seanchen.xincamera.camera.CameraController
-import com.seanchen.xincamera.core.designsystem.component.CameraIconButton
-import com.seanchen.xincamera.core.designsystem.component.CameraHorizontalScale
-import com.seanchen.xincamera.core.designsystem.component.CameraInfoBar
-import com.seanchen.xincamera.core.designsystem.component.CameraInfoItem
-import com.seanchen.xincamera.core.designsystem.component.CameraScaleTick
+import com.seanchen.xincamera.component.CameraHorizontalScale
+import com.seanchen.xincamera.component.CameraIconButton
+import com.seanchen.xincamera.component.CameraInfoBar
+import com.seanchen.xincamera.component.CameraInfoItem
+import com.seanchen.xincamera.component.CameraScaleTick
 import com.seanchen.xincamera.domain.model.ProfessionalCameraCapabilities
 import com.seanchen.xincamera.domain.model.ProfessionalCameraSettings
 import com.seanchen.xincamera.domain.model.WhiteBalancePreset
@@ -837,8 +836,8 @@ private fun ProfessionalExposureControls(
                             ratio = index.toScaleRatio(isoValues.size),
                             label = value.toString(),
                             isMajor = value == capabilities.isoMin ||
-                                value == capabilities.isoMax ||
-                                value in setOf(100, 200, 400, 800, 1600, 3200, 6400)
+                                    value == capabilities.isoMax ||
+                                    value in setOf(100, 200, 400, 800, 1600, 3200, 6400)
                         )
                     },
                     currentRatio = isoIndex.toScaleRatio(isoValues.size),

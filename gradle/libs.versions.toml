@@ -14,7 +14,11 @@ material = "1.14.0"
 runtime = "1.11.4"
 foundationLayout = "1.11.4"
 
+xinComponent = "0.1.1"
+
 [libraries]
+common-widget = { group = "com.github.Akiha678", name = "XinComponent", version.ref = "xinComponent" }
+
 androidx-core-ktx = { group = "androidx.core", name = "core-ktx", version.ref = "coreKtx" }
 junit = { group = "junit", name = "junit", version.ref = "junit" }
 androidx-junit = { group = "androidx.test.ext", name = "junit", version.ref = "junitVersion" }
